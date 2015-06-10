@@ -15,9 +15,12 @@
  ***************************************************************************** */
 package org.squeryl.dsl
 
+import org.squeryl.dsl.ast.EqualityExpression
 import org.squeryl.{ForeignKeyDeclaration, Table, Query, KeyedEntity}
 import collection.mutable.{HashMap, ArrayBuffer, Buffer}
 import org.squeryl.KeyedEntityDef
+
+import scala.reflect.runtime.universe._
 
 trait Relation[L,R] {
   
@@ -27,6 +30,8 @@ trait Relation[L,R] {
 }
 
 trait OneToManyRelation[O,M] extends Relation[O,M] {
+  def oneType: Class[O]
+  def manyType: Class[M]
 
   def foreignKeyDeclaration: ForeignKeyDeclaration
 
@@ -37,6 +42,8 @@ trait OneToManyRelation[O,M] extends Relation[O,M] {
   def right(rightSide: M): ManyToOne[O]
 
   def rightStateful(rightSide: M) = new StatefulManyToOne[O](right(rightSide))
+
+  def equalityExpression: (O,M)=>EqualityExpression
 }
 
 class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
