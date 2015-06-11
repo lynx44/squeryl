@@ -15,12 +15,15 @@
  ***************************************************************************** */
 package org.squeryl.dsl
 
-import ast.{LogicalBoolean, ExpressionNode, QueryExpressionNode, SelectElement}
+import org.squeryl.dsl.ast._
 import boilerplate._
-import org.squeryl.internals.{ResultSetMapper}
+import org.squeryl.dsl.internal.{OuterJoinedQueryable, JoinedQueryable}
+import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper}
 import java.sql.ResultSet
 
-import org.squeryl.Query
+import org.squeryl.{View, Table, Schema, Query}
+
+import scala.reflect.ClassTag
 
 trait QueryYield[R] {
 
@@ -37,6 +40,31 @@ trait QueryYield[R] {
      Iterable[Query[_]])
 
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
+  
+  private [squeryl] var includeExpressions: Seq[(JoinedQueryable[_], _)] = Nil
+
+  def include[P](inclusion: => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) = {
+    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
+    val pSample = sampleFor(pTable)
+
+    val rTable = s.findAllTablesFor(rClass.runtimeClass).head.asInstanceOf[Table[R]]
+    val rSample = sampleFor(rTable)
+
+    includeExpressions = Seq((new OuterJoinedQueryable[P](pTable, "left"), pSample))
+
+    //TODO: does this break other joins?
+    joinExpressions = Seq(() => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[R]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(rSample, pSample))
+    this
+  }
+
+  private def sampleFor[A](a: Table[A])(implicit s: Schema): A = {
+    val v = a.asInstanceOf[View[A]]
+    val vxn = v.viewExpressionNode
+    vxn.sample =
+      v.posoMetaData.createSample(FieldReferenceLinker.createCallBack(vxn))
+
+    vxn.sample
+  }
 
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)

@@ -90,9 +90,18 @@ abstract class AbstractQuery[R](
 
     val views = new ArrayBuffer[ViewExpressionNode[_]]
 
+    val (subQueryableCollection) =
+    if(qy.includeExpressions != Nil) {
+      val includeQueryables = qy.includeExpressions.map(x => createSubQueryable(x._1))
+//      val includeJoins = qy.includeExpressions.map(x => x._2)
+      subQueryables ++ includeQueryables
+    } else {
+      subQueryables
+    }
+
     if(qy.joinExpressions != Nil) {
-      val sqIterator = subQueryables.iterator
-      val joinExprsIterator = qy.joinExpressions.iterator 
+      val sqIterator = subQueryableCollection.iterator
+      val joinExprsIterator = qy.joinExpressions.iterator
       sqIterator.next // get rid of the first one
 
       while(sqIterator.hasNext) {
@@ -102,11 +111,11 @@ abstract class AbstractQuery[R](
       }
     }
 
-    for(sq <- subQueryables)
+    for(sq <- subQueryableCollection)
       if(! sq.isQuery)
         views.append(sq.node.asInstanceOf[ViewExpressionNode[_]])
 
-    for(sq <- subQueryables)
+    for(sq <- subQueryableCollection)
       if(sq.isQuery) {
         val z = sq.node.asInstanceOf[QueryExpressionNode[_]]
         if(! z.isUseableAsSubquery)

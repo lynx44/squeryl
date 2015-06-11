@@ -210,7 +210,13 @@ object FieldReferenceLinker {
       val prev = _lastAccessedFieldReference
       val res0 =
         try {
-          selectClosure()
+          if (q._queryYield.includeExpressions != Nil)
+          {
+            val closure = selectClosure()
+            (closure, q.views.filter(v => v.sample != closure).head)
+          } else {
+            selectClosure()
+          }
         }
         finally {
           _lastAccessedFieldReference = prev

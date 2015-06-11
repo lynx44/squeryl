@@ -19,7 +19,9 @@ import org.squeryl.dsl._
 import ast.{LogicalBoolean, UpdateStatement, UpdateAssignment}
 import boilerplate.{ComputeMeasuresSignaturesFromStartOrWhereState, ComputeMeasuresSignaturesFromGroupByState, GroupBySignatures, OrderBySignatures}
 
-import org.squeryl.Query
+import org.squeryl.{Schema, Query}
+
+import scala.reflect.ClassTag
 
 abstract sealed class Conditioned
 abstract sealed class Unconditioned
