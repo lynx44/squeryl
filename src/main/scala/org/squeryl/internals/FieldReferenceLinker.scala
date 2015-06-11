@@ -210,7 +210,7 @@ object FieldReferenceLinker {
       val prev = _lastAccessedFieldReference
       val res0 =
         try {
-          if (q._queryYield.includeExpressions != Nil)
+          if (q.hasIncludes)
           {
             val closure = selectClosure()
             (closure, q.views.filter(v => v.sample != closure).head)

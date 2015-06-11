@@ -39,14 +39,15 @@ class IncludeTest extends DbTestBase {
       val foo1 = IncludeSchema.people.insert(new Person("test"))
       val bar1 = IncludeSchema.children.insert(new Child("test", foo1.id))
 
-//      join(IncludeSchema.people, IncludeSchema.children.leftOuter)((f,b) =>
-//        select(f, b)
-//          on(f.id === b.map(_.personId))
-//      ).head
-      from(IncludeSchema.people)(p => select(p) include(p.children)).head
+      join(IncludeSchema.people, IncludeSchema.children.leftOuter)((f,b) =>
+        select(f, b)
+          on(f.id === b.map(_.personId))
+      ).head
+      from(IncludeSchema.people)(p => select(p) include(p.children)).statement
     }
 
-    assert(data.children.size == 1)
+//    assert(data.children.size == 1)
+    assert("" == data)
   }
 }
 

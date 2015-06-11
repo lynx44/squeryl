@@ -90,10 +90,16 @@ abstract class AbstractQuery[R](
 
     val views = new ArrayBuffer[ViewExpressionNode[_]]
 
-    val (subQueryableCollection) =
+    val subQueryableCollection =
     if(qy.includeExpressions != Nil) {
-      val includeQueryables = qy.includeExpressions.map(x => createSubQueryable(x._1))
-//      val includeJoins = qy.includeExpressions.map(x => x._2)
+      val leftQuery = subQueryables.head
+      val expanded = qy.includeExpressions.map(x => {
+        val queryable = createSubQueryable(x._1)
+        (queryable, x._2.apply(leftQuery.sample, queryable.sample))
+      })
+      val includeQueryables = expanded.map(_._1)
+      val includeJoinExpressions = expanded.map(x => () => x._2)
+      qy.joinExpressions = includeJoinExpressions
       subQueryables ++ includeQueryables
     } else {
       subQueryables
