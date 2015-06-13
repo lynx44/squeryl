@@ -29,7 +29,7 @@ abstract class AbstractQuery[R](
     private [squeryl] val unions: List[(String, Query[R])]
   ) extends Query[R] {
 
-  lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) sampleYield.includeExpressions.map(x => createSubQueryable(x._1)) else Seq()
+  lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) sampleYield.includeExpressions.flatMap(x => x._1.map(y => createSubQueryable(y._1))) else Seq()
   
   def sampleYield: QueryYield[R]
   
@@ -99,10 +99,10 @@ abstract class AbstractQuery[R](
       val leftQuery = subQueryables.head
       val expanded = qy.includeExpressions.zipWithIndex.map{ case (x, i) =>
         val queryable = this.includes(i)
-        (queryable, x._2.apply(leftQuery.sample, queryable.sample))
+        (queryable, x._1.map(a => a._2.apply(leftQuery.sample, queryable.sample)))
       }
       val includeQueryables = expanded.map(_._1)
-      val includeJoinExpressions = expanded.map(x => () => x._2)
+      val includeJoinExpressions = expanded.flatMap(x => x._2.map(y => () => y))
       qy.joinExpressions = includeJoinExpressions
       subQueryables ++ includeQueryables
     } else {
@@ -250,7 +250,7 @@ abstract class AbstractQuery[R](
             (give(resultSetMapper, rs),
               (sampleYield.includeExpressions.zipWithIndex.map { case (e, i) =>
                 val x = includes(i)
-                (x.give(rs), e._3)
+                (x.give(rs), e._2)
               }))
           }
         ).toList

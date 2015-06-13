@@ -13,9 +13,15 @@ class Manager(val lastName: String) extends KeyedEntity[Long] {
 
 class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
+
+  lazy val benefits = IncludeSchema.employee_benefit_relation.left(this)
 }
 
 class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
+  val id: Long = 0
+}
+
+class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 }
 
@@ -23,9 +29,11 @@ object IncludeSchema extends Schema {
   val managers = table[Manager]
   val employees = table[Employee]
   val responsibilities = table[Responsibility]
+  val benefits = table[Benefit]
 
   val manager_employee_relation = oneToManyRelation(managers, employees).via((m, e) => m.id === e.managerId)
   val manager_responsibility_relation = oneToManyRelation(managers, responsibilities).via((m, r) => m.id === r.managerId)
+  val employee_benefit_relation = oneToManyRelation(employees, benefits).via((e, b) => e.id === b.employeeId)
 
   def reset() = {
     drop // its protected for some reason
@@ -39,7 +47,9 @@ class IncludeTest extends DbTestBase {
   //TODO: composite key test
   //TODO: nested include test? select(p) include(d => d.employees.map(_.responsibilities))
   //TODO: multiple from clauses
-  //TODO: joinsmad
+  //TODO: joins
+  //TODO: many to many
+  //TODO: many to one
 
   // wish list
   // TODO: where(p.employees.map(_.name === "bob")) select(p) include(d => d.employees)
@@ -219,5 +229,26 @@ class IncludeTest extends DbTestBase {
   }
 
   // end Double Include tests
+
+  // begin Nested Include tests
+
+  test("include oneToMany - nested relation") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("child", m.id))
+      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees) includeDescendants(d => d.employees.map(_.benefits))).head
+    }
+
+    assert(data.employees.head.benefits.size == 1)
+  }
+
+  //end Nested Include tests
 }
 

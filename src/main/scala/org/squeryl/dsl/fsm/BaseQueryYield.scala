@@ -105,12 +105,14 @@ class BaseQueryYield[G]
     val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
 
     val includeExpressions = this.includeExpressions ++ Seq(
-      (new OuterJoinedQueryable[P](pTable, "left"),
-        (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get),
+      (Seq((new OuterJoinedQueryable[P](pTable, "left"),
+        (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get))),
         inclusion.asInstanceOf[Any => OneToMany[Any]]))
 
     new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, includeExpressions)
   }
+
+  def includeDescendants[P](inclusion: (G) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]): IncludedPropertiesQueryYield[G] = ???
 }
 
 class GroupQueryYield[K] (
@@ -231,8 +233,6 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 class IncludedPropertiesQueryYield[R](
                                        val qe: QueryElements[_],
                                        val sc: ()=>R,
-                                       override val includeExpressions: Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression, (Any) => OneToMany[Any])])
+                                       override val includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => OneToMany[Any])])
   extends BaseQueryYield[R](qe, sc) {
-
-  override def invokeYield(rsm: ResultSetMapper, rs: ResultSet): R = super.invokeYield(rsm, rs)
 }
