@@ -6,9 +6,9 @@ import java.sql.ResultSet
 
 class DelegateQuery[M](val q: Query[M]) extends Query[M] {
 
-  protected var qIterator = q.iterator
+  protected var subCollection: Option[Iterable[M]] = None
 
-  def iterator = qIterator
+  def iterator = subCollection.map(_.iterator).getOrElse(q.iterator)
 
   def distinct = q.distinct
 

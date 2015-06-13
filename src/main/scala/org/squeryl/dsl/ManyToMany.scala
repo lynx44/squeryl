@@ -30,8 +30,8 @@ trait Relation[L,R] {
 }
 
 trait OneToManyRelation[O,M] extends Relation[O,M] {
-  def oneType: Class[O]
-  def manyType: Class[M]
+  private [squeryl] def oneType: Class[O]
+  private [squeryl] def manyType: Class[M]
 
   def foreignKeyDeclaration: ForeignKeyDeclaration
 
@@ -261,7 +261,7 @@ trait OneToMany[M] extends Query[M] {
   
   def deleteAll: Int
 
-  def fill(o: Iterable[M])
+  private [squeryl] def fill(o: Iterable[M])
 }
 
 trait ManyToOne[O] extends Query[O] {

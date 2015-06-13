@@ -19,7 +19,7 @@ import ast._
 import internal.{InnerJoinedQueryable, OuterJoinedQueryable}
 import java.sql.ResultSet
 import org.squeryl.internals._
-import org.squeryl.{View, Queryable, Session, Query}
+import org.squeryl._
 import collection.mutable.ArrayBuffer
 import org.squeryl.logging._
 import java.io.Closeable
@@ -204,20 +204,22 @@ abstract class AbstractQuery[R](
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
   private class IncludeIterable[R](data: Seq[(R, Seq[(Any, Any => OneToMany[Any])])]) extends Iterator[R] {
-    private val iterator = data.iterator
+    private val structuredData =
+      data
+        .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
+        .map(t => {
+          val r = t._2.head._1
+          t._2
+            .flatMap(_._2)
+            .groupBy(g => g._2)
+            .foreach(otm => otm._1(r)
+            .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
+          r
+        }).toList
+    private val iterator = structuredData.iterator
     def hasNext: Boolean = iterator.hasNext
 
-    def next(): R = {
-      val r = iterator.next()._1
-
-      val groupedByFunc = data.flatMap(_._2)
-        .groupBy(g => g._2)
-
-      groupedByFunc
-        .foreach(otm => otm._1(r).fill(otm._2.map(x => x._1)))
-
-      r
-    }
+    def next(): R = iterator.next
   }
 
   def iterator = new Iterator[R] with Closeable {
