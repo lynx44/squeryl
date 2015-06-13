@@ -1,5 +1,6 @@
 package org.squeryl.test
 
+import org.squeryl.dsl.OneToMany
 import org.squeryl.{Schema, KeyedEntity}
 import org.squeryl.framework.{DBConnector, DbTestBase}
 import org.squeryl.test.PrimitiveTypeModeForTests._
@@ -39,15 +40,16 @@ class IncludeTest extends DbTestBase {
       val foo1 = IncludeSchema.people.insert(new Person("test"))
       val bar1 = IncludeSchema.children.insert(new Child("test", foo1.id))
 
-      join(IncludeSchema.people, IncludeSchema.children.leftOuter)((f,b) =>
-        select(f, b)
-          on(f.id === b.map(_.personId))
-      ).head
-      from(IncludeSchema.people)(p => select(p) include(p.children)).statement
+//      join(IncludeSchema.people, IncludeSchema.children.leftOuter)((f,b) =>
+//        groupBy(f.id)
+////        select(f, b)
+//          on(f.id === b.map(_.personId))
+//      ).head
+      from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
     }
 
-//    assert(data.children.size == 1)
-    assert("" == data)
+    assert(data.children.size == 1)
+//    assert("" == data)
   }
 }
 

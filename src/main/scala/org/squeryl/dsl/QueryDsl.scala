@@ -685,6 +685,8 @@ trait QueryDsl
           assign(m)
           rightTable.insertOrUpdate(m)(kedM)
         }
+
+        def fill(o: Iterable[M]): Unit = this.qIterator = o.iterator
       }
     }
 

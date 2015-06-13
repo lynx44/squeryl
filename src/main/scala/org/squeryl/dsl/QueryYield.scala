@@ -17,6 +17,7 @@ package org.squeryl.dsl
 
 import org.squeryl.dsl.ast._
 import boilerplate._
+import org.squeryl.dsl.fsm.IncludedPropertiesQueryYield
 import org.squeryl.dsl.internal.{OuterJoinedQueryable, JoinedQueryable}
 import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper}
 import java.sql.ResultSet
@@ -41,30 +42,9 @@ trait QueryYield[R] {
 
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
   
-  private [squeryl] var includeExpressions: Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)] = Nil
+  protected [squeryl] def includeExpressions: Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression, (Any) => OneToMany[Any])] = Seq()
 
-  def include[P](inclusion: => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) = {
-    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
-    val pSample = sampleFor(pTable)
-
-    val rTable = s.findAllTablesFor(rClass.runtimeClass).head.asInstanceOf[Table[R]]
-    val rSample = sampleFor(rTable)
-
-    includeExpressions = Seq((new OuterJoinedQueryable[P](pTable, "left"), (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[R]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[R], p.asInstanceOf[Option[P]].get)))
-
-    //TODO: does this break other joins?
-//    joinExpressions = Seq(() => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[R]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(rSample, pSample))
-    this
-  }
-
-  private def sampleFor[A](a: Table[A])(implicit s: Schema): A = {
-    val v = a.asInstanceOf[View[A]]
-    val vxn = v.viewExpressionNode
-    vxn.sample =
-      v.posoMetaData.createSample(FieldReferenceLinker.createCallBack(vxn))
-
-    vxn.sample
-  }
+  def include[P](inclusion: R => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
 
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)

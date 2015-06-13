@@ -260,6 +260,8 @@ trait OneToMany[M] extends Query[M] {
   def associate(m: M): M
   
   def deleteAll: Int
+
+  def fill(o: Iterable[M])
 }
 
 trait ManyToOne[O] extends Query[O] {

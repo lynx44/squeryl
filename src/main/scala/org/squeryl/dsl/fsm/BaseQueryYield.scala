@@ -18,10 +18,11 @@ package org.squeryl.dsl.fsm
 import org.squeryl.dsl.ast._
 import org.squeryl.dsl._
 import org.squeryl.dsl.boilerplate._
+import org.squeryl.dsl.internal.{JoinedQueryable, OuterJoinedQueryable}
 import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper, ColumnToTupleMapper, OutMapper}
 import java.sql.ResultSet
 
-import org.squeryl.{Schema, Query}
+import org.squeryl.{Table, Schema, Query}
 
 import scala.reflect.ClassTag
 
@@ -100,20 +101,16 @@ class BaseQueryYield[G]
           else b
       }
 
-//  def include[P](inclusion: => P)(implicit s: Schema, gClass: ClassTag[G], pClass: ClassTag[P]): QueryYield[G] = {
-//    // find the relation and add the on clause
-//    new BaseQueryYield[G](queryElementzz, selectClosure)
-//      .on(s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(selectClosure(), inclusion))
-//      .queryYield
-//  }
+  def include[P](inclusion: G => OneToMany[P])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]) = {
+    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
 
-}
+    val includeExpressions = Seq(
+      (new OuterJoinedQueryable[P](pTable, "left"),
+        (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get),
+        inclusion.asInstanceOf[Any => OneToMany[Any]]))
 
-class IncludeQueryYield[R](_qe: QueryElements[_])
-  extends BaseQueryYield[R](_qe, null) {
-  override def invokeYieldForAst(q: QueryExpressionNode[_], rsm: ResultSetMapper): (List[SelectElement], AnyRef) = super.invokeYieldForAst(q, rsm)
-
-  override def invokeYield(rsm: ResultSetMapper, rs: ResultSet): R = super.invokeYield(rsm, rs)
+    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, includeExpressions)
+  }
 }
 
 class GroupQueryYield[K] (
@@ -229,4 +226,13 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 
     (List(knodes,mnodes).flatten,  new SampleGroupWithMeasures(stK, stM))
   }
+}
+
+class IncludedPropertiesQueryYield[R](
+                                       val qe: QueryElements[_],
+                                       val sc: ()=>R,
+                                       override val includeExpressions: Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression, (Any) => OneToMany[Any])])
+  extends BaseQueryYield[R](qe, sc) {
+
+  override def invokeYield(rsm: ResultSetMapper, rs: ResultSet): R = super.invokeYield(rsm, rs)
 }

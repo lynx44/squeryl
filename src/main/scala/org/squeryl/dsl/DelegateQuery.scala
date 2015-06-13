@@ -6,7 +6,9 @@ import java.sql.ResultSet
 
 class DelegateQuery[M](val q: Query[M]) extends Query[M] {
 
-  def iterator = q.iterator
+  protected var qIterator = q.iterator
+
+  def iterator = qIterator
 
   def distinct = q.distinct
 
