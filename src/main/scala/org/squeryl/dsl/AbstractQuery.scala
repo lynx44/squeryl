@@ -203,6 +203,23 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
+  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, Any => OneToMany[Any])])]) extends Iterator[R] {
+    private val iterator = data.iterator
+    def hasNext: Boolean = iterator.hasNext
+
+    def next(): R = {
+      val r = iterator.next()._1
+
+      val groupedByFunc = data.flatMap(_._2)
+        .groupBy(g => g._2)
+
+      groupedByFunc
+        .foreach(otm => otm._1(r).fill(otm._2.map(x => x._1)))
+
+      r
+    }
+  }
+
   def iterator = new Iterator[R] with Closeable {
 
     val sw = new StatementWriter(false, _dbAdapter)
@@ -223,6 +240,23 @@ abstract class AbstractQuery[R](
     var _hasNext = false;
 
     var rowCount = 0
+
+    val includeIterable =
+      if(sampleYield.includeExpressions != Nil)
+      {
+        val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
+            (give(resultSetMapper, rs),
+              (sampleYield.includeExpressions.zipWithIndex.map { case (e, i) =>
+                val x = includes(i)
+                (x.give(rs), e._3)
+              }))
+          }
+        ).toList
+        Some(new IncludeIterable[R](valueMap))
+      } else {
+        None
+      }
+
     
     def close {
       stmt.close
@@ -245,13 +279,13 @@ abstract class AbstractQuery[R](
       _nextCalled = true
     }
 
-    def hasNext = {
+    def hasNext = includeIterable.map(_.hasNext).getOrElse({
       if(!_nextCalled)
         _next
       _hasNext
-    }
+    })
 
-    def next: R = {
+    def next: R = includeIterable.map(_.next).getOrElse({
       if(!_nextCalled)
         _next
       if(!_hasNext)
@@ -262,7 +296,7 @@ abstract class AbstractQuery[R](
         s.log(ResultSetUtils.dumpRow(rs))
 
       give(resultSetMapper, rs)
-    }
+    })
   }
 
   override def toString = dumpAst + "\n" + _genStatement(true)
