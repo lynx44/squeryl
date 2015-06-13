@@ -104,7 +104,7 @@ class BaseQueryYield[G]
   def include[P](inclusion: G => OneToMany[P])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]) = {
     val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
 
-    val includeExpressions = Seq(
+    val includeExpressions = this.includeExpressions ++ Seq(
       (new OuterJoinedQueryable[P](pTable, "left"),
         (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get),
         inclusion.asInstanceOf[Any => OneToMany[Any]]))

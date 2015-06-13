@@ -210,13 +210,7 @@ object FieldReferenceLinker {
       val prev = _lastAccessedFieldReference
       val res0 =
         try {
-          if (q.hasIncludes)
-          {
-            val closure = selectClosure()
-            (closure, q.views.filter(v => v.sample != closure).head)
-          } else {
-            selectClosure()
-          }
+          selectClosure()
         }
         finally {
           _lastAccessedFieldReference = prev
@@ -228,6 +222,11 @@ object FieldReferenceLinker {
       val visitedSet = new java.util.IdentityHashMap[AnyRef, AnyRef]
         
       _populateSelectColsRecurse(visitedSet, yi, q, res0)
+
+      if (q.hasIncludes) {
+        val deps = q.views.filter(v => v.sample != res0)
+        deps.foreach(_populateSelectColsRecurse(visitedSet, yi, q, _))
+      }
 
       result = (yi.outExpressions, res0)
     }

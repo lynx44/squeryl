@@ -1,25 +1,31 @@
 package org.squeryl.test
 
-import org.squeryl.dsl.OneToMany
-import org.squeryl.{Schema, KeyedEntity}
 import org.squeryl.framework.{DBConnector, DbTestBase}
 import org.squeryl.test.PrimitiveTypeModeForTests._
+import org.squeryl.{KeyedEntity, Schema}
 
-class Person(val lastName: String) extends KeyedEntity[Long] {
+class Manager(val lastName: String) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val children = IncludeSchema.foo_bar_relation.left(this)
+  lazy val employees = IncludeSchema.manager_employee_relation.left(this)
+  lazy val responsibilities = IncludeSchema.manager_responsibility_relation.left(this)
 }
 
-class Child(val name: String, val personId: Long) extends KeyedEntity[Long] {
+class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
+  val id: Long = 0
+}
+
+class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 }
 
 object IncludeSchema extends Schema {
-  val people = table[Person]
-  val children = table[Child]
+  val managers = table[Manager]
+  val employees = table[Employee]
+  val responsibilities = table[Responsibility]
 
-  val foo_bar_relation = oneToManyRelation(people, children).via((f, b) => f.id === b.personId)
+  val manager_employee_relation = oneToManyRelation(managers, employees).via((m, e) => m.id === e.managerId)
+  val manager_responsibility_relation = oneToManyRelation(managers, responsibilities).via((m, r) => m.id === r.managerId)
 
   def reset() = {
     drop // its protected for some reason
@@ -30,25 +36,15 @@ object IncludeSchema extends Schema {
 class IncludeTest extends DbTestBase {
   self: DBConnector =>
 
-//  test("basic query") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    transaction {
-//      val p1 = IncludeSchema.people.insert(new Person("person1"))
-//      val p2 = IncludeSchema.people.insert(new Person("person2"))
-//
-//      val data = from(IncludeSchema.people)(p => select(p))
-//
-//      data.last
-//      data.head
-//    }
-//
-//
-////    assert(data.size == 2)
-//  }
+  //TODO: composite key test
+  //TODO: nested include test? select(p) include(d => d.employees.map(_.responsibilities))
+  //TODO: multiple from clauses
+  //TODO: joinsmad
+
+  // wish list
+  // TODO: where(p.employees.map(_.name === "bob")) select(p) include(d => d.employees)
+
+  // Single Include tests
 
   test("include oneToMany - many relation with one child") {
     implicit val schema = IncludeSchema
@@ -57,13 +53,13 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
-      val c = IncludeSchema.children.insert(new Child("child", p.id))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
     }
 
-    assert(data.children.size == 1)
+    assert(data.employees.size == 1)
   }
 
   test("include oneToMany - many relation with two children") {
@@ -73,14 +69,14 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
-      val c1 = IncludeSchema.children.insert(new Child("child1", p.id))
-      val c2 = IncludeSchema.children.insert(new Child("child2", p.id))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c1 = IncludeSchema.employees.insert(new Employee("child1", p.id))
+      val c2 = IncludeSchema.employees.insert(new Employee("child2", p.id))
 
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
     }
 
-    assert(data.children.size == 2)
+    assert(data.employees.size == 2)
   }
 
   test("include oneToMany - many relation with two parents and two children") {
@@ -90,17 +86,17 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val p1 = IncludeSchema.people.insert(new Person("person1"))
-      val p2 = IncludeSchema.people.insert(new Person("person2"))
-      val c1 = IncludeSchema.children.insert(new Child("child1", p1.id))
-      val c2 = IncludeSchema.children.insert(new Child("child2", p2.id))
+      val p1 = IncludeSchema.managers.insert(new Manager("person1"))
+      val p2 = IncludeSchema.managers.insert(new Manager("person2"))
+      val c1 = IncludeSchema.employees.insert(new Employee("child1", p1.id))
+      val c2 = IncludeSchema.employees.insert(new Employee("child2", p2.id))
 
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).toList
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).toList
     }
 
     assert(data.size == 2)
-    assert(data.filter(p => p.lastName == "person1").head.children.head.name == "child1")
-    assert(data.filter(p => p.lastName == "person2").head.children.head.name == "child2")
+    assert(data.filter(p => p.lastName == "person1").head.employees.head.name == "child1")
+    assert(data.filter(p => p.lastName == "person2").head.employees.head.name == "child2")
   }
 
   test("include oneToMany - many relation with no data returns empty") {
@@ -110,7 +106,7 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).toList
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).toList
     }
 
     assert(data.size == 0)
@@ -123,14 +119,14 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
-      val c = IncludeSchema.children.insert(new Child("child", p.id))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
     }
 
-    assert(data.children.size == 1)
-    assert(data.children.size == 1)
+    assert(data.employees.size == 1)
+    assert(data.employees.size == 1)
   }
 
   test("include oneToMany - many relation with no children returns empty") {
@@ -140,12 +136,12 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
     }
 
-    assert(data.children.size == 0)
+    assert(data.employees.size == 0)
   }
 
   test("include oneToMany - can delete children") {
@@ -155,14 +151,14 @@ class IncludeTest extends DbTestBase {
     }
 
     transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
-      val c = IncludeSchema.children.insert(new Child("child", p.id))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      val data = from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
 
-      data.children.deleteAll
+      data.employees.deleteAll
 
-      assert(data.children.size == 0)
+      assert(data.employees.size == 0)
     }
   }
 
@@ -173,14 +169,14 @@ class IncludeTest extends DbTestBase {
     }
 
     transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
-      val c = new Child("child", p.id)
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = new Employee("child", p.id)
 
-      val data = from(IncludeSchema.people)(p => select(p) include(d => d.children)).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head
 
-      data.children.associate(c)
+      data.employees.associate(c)
 
-      assert(data.children.size == 1)
+      assert(data.employees.size == 1)
     }
   }
 
@@ -191,13 +187,37 @@ class IncludeTest extends DbTestBase {
     }
 
     val (p, data) = transaction {
-      val p = IncludeSchema.people.insert(new Person("person"))
+      val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      (p, from(IncludeSchema.people)(p => select(p) include(d => d.children)).head)
+      (p, from(IncludeSchema.managers)(p => select(p) include(d => d.employees)).head)
     }
-    val c = new Child("child", p.id)
+    val c = new Employee("child", p.id)
 
-    data.children.assign(c)
+    data.employees.assign(c)
   }
+
+  // end Single Include tests
+
+  // Double Include tests
+
+  test("include oneToMany - many relation with two includes, one child each") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("r", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(d => d.responsibilities) include(d => d.employees)).head
+    }
+
+    assert(data.responsibilities.size == 1)
+    assert(data.employees.size == 1)
+  }
+
+  // end Double Include tests
 }
 
