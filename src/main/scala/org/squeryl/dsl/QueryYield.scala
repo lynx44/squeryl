@@ -42,7 +42,7 @@ trait QueryYield[R] {
 
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
   
-  protected [squeryl] def includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => OneToMany[Any])] = Seq()
+  protected [squeryl] def includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])] = Seq()
 
 //  def include[P](inclusion: R => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
 //  def includeDescendants[P](inclusion: (R) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]

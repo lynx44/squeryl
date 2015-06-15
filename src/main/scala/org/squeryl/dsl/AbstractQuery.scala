@@ -18,6 +18,7 @@ package org.squeryl.dsl
 import ast._
 import internal.{InnerJoinedQueryable, OuterJoinedQueryable}
 import java.sql.ResultSet
+import org.squeryl.dsl.fsm.IncludePath
 import org.squeryl.internals._
 import org.squeryl._
 import collection.mutable.ArrayBuffer
@@ -203,7 +204,7 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, Any => OneToMany[Any])])]) extends Iterator[R] {
+  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, Any => IncludePath[Any])])]) extends Iterator[R] {
     private val structuredData =
       data
         .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
@@ -213,7 +214,7 @@ abstract class AbstractQuery[R](
             .flatMap(_._2)
             .groupBy(g => g._2)
             .foreach(otm => otm._1(r)
-            .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
+            .invoke[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
           r
         }).toList
     private val iterator = structuredData.iterator

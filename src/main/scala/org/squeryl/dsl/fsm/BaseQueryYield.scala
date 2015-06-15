@@ -106,17 +106,26 @@ class BaseQueryYield[G]
           else b
       }
 
-  def include[P](inclusion: G => IncludePath[P])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]) = {
+  def include[P](inclusion: G => IncludePath[P])(implicit s: Schema, gClass: ClassTag[G], pClass: ClassTag[P]) = {
     val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
 
     val includeExpressions = this.includeExpressions ++ Seq(
       (Seq((new OuterJoinedQueryable[P](pTable, "left"),
-        (r: Any, p: Any) => s.findRelationsFor(rClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get))),
-        inclusion.asInstanceOf[Any => OneToMany[Any]]))
+        (r: Any, p: Any) => s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get))),
+        inclusion.asInstanceOf[Any => IncludePath[Any]]))
 
     new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, includeExpressions)
   }
 
+  private def sampleFor[A](a: Table[A])(implicit s: Schema): A = {
+    val v = a.asInstanceOf[View[A]]
+    val vxn = v.viewExpressionNode
+    vxn.sample =
+      v.posoMetaData.createSample(FieldReferenceLinker.createCallBack(vxn))
+
+    vxn.sample
+  }
+  
 //  private val enhancer = new Enhancer
 //    def includeDescendants[P](inclusion: (G) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]): IncludedPropertiesQueryYield[G] = {
 //      val gTable = s.findAllTablesFor(rClass.runtimeClass).head.asInstanceOf[Table[G]]
@@ -136,10 +145,6 @@ class BaseQueryYield[G]
 //    private def sampleFor[A](a: Table[A])(implicit s: Schema): (A, Callback) = {
 //      val v = a.asInstanceOf[View[A]]
 //      val vxn = v.viewExpressionNode
-//      if(callBack == null)
-//      {
-//        callBack = new SampleLinkReader
-//      }
 //      enhancer.setCallback(callBack)
 //      vxn.sample =
 //        v.posoMetaData.createSample(callBack)
@@ -355,6 +360,6 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 class IncludedPropertiesQueryYield[R](
                                        val qe: QueryElements[_],
                                        val sc: ()=>R,
-                                       override val includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => OneToMany[Any])])
+                                       override val includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])])
   extends BaseQueryYield[R](qe, sc) {
 }
