@@ -242,6 +242,8 @@ class StatefulManyToMany[O,A](val relation: ManyToMany[O,A]) extends Iterable[O]
 
 trait OneToMany[M] extends Query[M] {
 
+  private [squeryl] def genericType: Class[M]
+
   /**
    * @param the object on the 'many side' to be associated with this
    *

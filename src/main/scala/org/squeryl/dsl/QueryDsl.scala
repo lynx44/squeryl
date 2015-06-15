@@ -694,6 +694,8 @@ trait QueryDsl
         private [squeryl] def fill(o: Iterable[M]): Unit = this.subCollection = Option(o)
 
         private def resetIncludes = this.subCollection = None
+
+        private[squeryl] def genericType: Class[M] = manyType
       }
     }
 
