@@ -41,12 +41,13 @@ trait QueryYield[R] {
      Iterable[Query[_]])
 
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
-  
-  protected [squeryl] def includeExpressions: Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])] = Seq()
+
+  //Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])] = Seq()
+  protected [squeryl] def includeExpressions: Option[IncludePathBase] = None
 
 //  def include[P](inclusion: R => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
 //  def includeDescendants[P](inclusion: (R) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
-  def include(i: R => IncludePathBase)(implicit s: Schema/*, rClass: ClassTag[R], pClass: ClassTag[_]*/) : IncludedPropertiesQueryYield[R]
+  def include(i: R => IncludePathBase)(implicit s: Schema, rClass: ClassTag[R]/*, pClass: ClassTag[_]*/) : IncludedPropertiesQueryYield[R]
 
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)

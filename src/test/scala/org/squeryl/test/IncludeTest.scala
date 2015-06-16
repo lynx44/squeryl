@@ -220,23 +220,23 @@ class IncludeTest extends DbTestBase {
 
   // Double Include tests
 
-  test("include oneToMany - many relation with two includes, one child each") {
-    implicit val schema = IncludeSchema
-    transaction {
-      IncludeSchema.reset
-    }
-
-    val data = transaction {
-      val p = IncludeSchema.managers.insert(new Manager("person"))
-      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-      val r = IncludeSchema.responsibilities.insert(new Responsibility("r", p.id))
-
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.responsibilities)) include(_.member(_.employees))).head
-    }
-
-    assert(data.responsibilities.size == 1)
-    assert(data.employees.size == 1)
-  }
+//  test("include oneToMany - many relation with two includes, one child each") {
+//    implicit val schema = IncludeSchema
+//    transaction {
+//      IncludeSchema.reset
+//    }
+//
+//    val data = transaction {
+//      val p = IncludeSchema.managers.insert(new Manager("person"))
+//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+//      val r = IncludeSchema.responsibilities.insert(new Responsibility("r", p.id))
+//
+//      from(IncludeSchema.managers)(p => select(p) include(_.member(_.responsibilities)) include(_.member(_.employees))).head
+//    }
+//
+//    assert(data.responsibilities.size == 1)
+//    assert(data.employees.size == 1)
+//  }
 
   // end Double Include tests
 

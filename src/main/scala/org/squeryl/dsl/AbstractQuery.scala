@@ -18,7 +18,7 @@ package org.squeryl.dsl
 import ast._
 import internal.{InnerJoinedQueryable, OuterJoinedQueryable}
 import java.sql.ResultSet
-import org.squeryl.dsl.fsm.IncludePath
+import org.squeryl.dsl.fsm.{IncludePathBase, IncludePath}
 import org.squeryl.internals._
 import org.squeryl._
 import collection.mutable.ArrayBuffer
@@ -30,8 +30,13 @@ abstract class AbstractQuery[R](
     private [squeryl] val unions: List[(String, Query[R])]
   ) extends Query[R] {
 
-  lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) sampleYield.includeExpressions.flatMap(x => x._1.map(y => createSubQueryable(y._1))) else Seq()
-  
+  lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) Seq(includeSubQueryable) else Seq()
+
+  lazy val includeSubQueryable = createSubQueryable(sampleYield.includeExpressions.get.joinedQueryable)
+  private def subQueryableFor(includePath: IncludePathBase): SubQueryable[_] = {
+    includeSubQueryable
+  }
+
   def sampleYield: QueryYield[R]
   
   private [squeryl] var selectDistinct = false
@@ -96,16 +101,18 @@ abstract class AbstractQuery[R](
     val views = new ArrayBuffer[ViewExpressionNode[_]]
 
     val subQueryableCollection =
-    if(qy.includeExpressions != Nil) {
+    if(qy.includeExpressions.nonEmpty) {
       val leftQuery = subQueryables.head
-      val expanded = qy.includeExpressions.zipWithIndex.map{ case (x, i) =>
-        val queryable = this.includes(i)
-        (queryable, x._1.map(a => a._2.apply(leftQuery.sample, queryable.sample)))
-      }
-      val includeQueryables = expanded.map(_._1)
-      val includeJoinExpressions = expanded.flatMap(x => x._2.map(y => () => y))
-      qy.joinExpressions = includeJoinExpressions
-      subQueryables ++ includeQueryables
+      val includes = qy.includeExpressions.get
+//      val expanded = qy.includeExpressions.zipWithIndex.map{ case (x, i) =>
+//        val queryable = this.includes(i)
+//        (queryable, x._1.map(a => a._2.apply(leftQuery.sample, queryable.sample)))
+//      }
+//      val includeQueryables = expanded.map(_._1)
+      //val includeJoinExpressions = expanded.flatMap(x => x._2.map(y => () => y))
+      val subqueryable = subQueryableFor(includes)
+      qy.joinExpressions = Seq(() => includes.equalityExpressionAccessor(leftQuery.sample, subqueryable.sample)) //includeJoinExpressions
+      subQueryables ++ Seq(subqueryable)
     } else {
       subQueryables
     }
@@ -204,7 +211,7 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, Any => IncludePath[Any])])]) extends Iterator[R] {
+  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, IncludePathBase)])]) extends Iterator[R] {
     private val structuredData =
       data
         .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
@@ -213,8 +220,8 @@ abstract class AbstractQuery[R](
           t._2
             .flatMap(_._2)
             .groupBy(g => g._2)
-            .foreach(otm => otm._1(r)
-            .invoke[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
+            .foreach(otm => otm._1
+            .relationshipAccessor[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
           r
         }).toList
     private val iterator = structuredData.iterator
@@ -245,14 +252,14 @@ abstract class AbstractQuery[R](
     var rowCount = 0
 
     val includeIterable =
-      if(sampleYield.includeExpressions != Nil)
+      if(sampleYield.includeExpressions.nonEmpty)
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
             (give(resultSetMapper, rs),
               (sampleYield.includeExpressions.zipWithIndex.map { case (e, i) =>
-                val x = includes(i)
-                (x.give(rs), e._2)
-              }))
+
+                (subQueryableFor(e).give(rs), e)
+              }).toSeq)
           }
         ).toList
         Some(new IncludeIterable[R](valueMap))
