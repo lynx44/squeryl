@@ -254,8 +254,9 @@ class IncludeTest extends DbTestBase {
       val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
 
       from(IncludeSchema.managers)(p => select(p)
-        include(_.member(_.employees).member(_.benefits).member(_.categories))
-        include(_.member(_.responsibilities))).head
+//        include(_.members(_.employees.member(_.benefits.member(_.categories)),
+//                         _.responsibilities))
+        include(_.members(_.employees.members(_.benefits.members(_.member(_.categories))), _.member(_.responsibilities)))).head
     }
 
     assert(data.employees.head.benefits.size == 1)

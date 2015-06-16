@@ -25,7 +25,7 @@ import org.squeryl.dsl.internal.{JoinedQueryable, OuterJoinedQueryable}
 import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper, ColumnToTupleMapper, OutMapper}
 import java.sql.ResultSet
 
-import org.squeryl.{View, Table, Schema, Query}
+import org.squeryl._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -106,13 +106,13 @@ class BaseQueryYield[G]
           else b
       }
 
-  def include[P](inclusion: G => IncludePath[P])(implicit s: Schema, gClass: ClassTag[G], pClass: ClassTag[P]) = {
-    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[P]]
+  def include(inclusion: G => IncludePathBase)(implicit s: Schema/*, gClass: ClassTag[G], pClass: ClassTag[_]*/) = {
+//    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[_]]
 
-    val includeExpressions = this.includeExpressions ++ Seq(
-      (Seq((new OuterJoinedQueryable[P](pTable, "left"),
-        (r: Any, p: Any) => s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[P]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[P]].get))),
-        inclusion.asInstanceOf[Any => IncludePath[Any]]))
+    val includeExpressions = this.includeExpressions /*++ Seq(
+      (Seq((new OuterJoinedQueryable[Any](pTable.asInstanceOf[Queryable[Any]], "left"),
+        (r: Any, p: Any) => s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[Any]].get))),
+        inclusion.asInstanceOf[Any => IncludePath[Any]]))*/
 
     new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, includeExpressions)
   }

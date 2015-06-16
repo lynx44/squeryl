@@ -3,22 +3,35 @@ package org.squeryl.dsl.fsm
 import org.squeryl.KeyedEntity
 import org.squeryl.dsl.OneToMany
 
-trait IncludePath[M] {
-  def invoke[T](o: Any): T
+trait IncludePath[M] extends IncludePathBase {
 
   def member[P](i: M => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
+//  def members(i: (M => OneToMany[Any])*): IncludePath[Any] = new OneToManyIncludePath[M, Any](i.head)
+//  def member[P](i: M => IncludePath[P]): IncludePath[P] = ???
+}
+
+trait IncludePathBase {
+  def invoke[T](o: Any): T
 }
 
 object Path {
   implicit class ObjectToPath[M](r: M) {
     def member[P](i: M => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
+    def members(i: (M => IncludePathBase)*): IncludePathBase = new OneToManyIncludePath[M, Any](null)
+  }
+
+  implicit class OneToManyToPath[M](r: OneToMany[M]) {
+    def member[P](i: M => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
+//    def member[P](i: M => IncludePath[P]): IncludePath[P] = new OneToManyIncludePath[M, P](null)
+//    def members(i: (M => OneToMany[_])*): IncludePath[_] = new OneToManyIncludePath[M, Any](null)
+    def members(i: (M => IncludePathBase)*): IncludePathBase = new OneToManyIncludePath[M, Any](null)
   }
 
 //  implicit class OneToManyToIncludePath[M](r: M) {
 //
 //  }
 
-//  implicit def OneToManyAccessorToIncludePath[P](i: Any => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[Any, P](i)
+//  implicit def OneToManyAccessorToIncludePath[P](i: _ => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[_, P](i)
 }
 
 class OneToManyIncludePath[M, P](accessor: M => OneToMany[P]) extends IncludePath[P] {
