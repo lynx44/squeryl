@@ -8,19 +8,23 @@ import org.squeryl.internals.FieldReferenceLinker
 
 import scala.reflect.ClassTag
 
-trait IncludePath[M] extends IncludePathBase {
+//trait IncludePath[M] extends IncludePathRelation {
+//
+//  def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePathRelation[M, P](i, new IncludePathNode[M](null), new IncludePathNode[P](null))
+////  def members(i: (M => OneToMany[Any])*): IncludePath[Any] = new OneToManyIncludePath[M, Any](i.head)
+////  def member[P](i: M => IncludePath[P]): IncludePath[P] = ???
+//}
 
-  def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
-//  def members(i: (M => OneToMany[Any])*): IncludePath[Any] = new OneToManyIncludePath[M, Any](i.head)
-//  def member[P](i: M => IncludePath[P]): IncludePath[P] = ???
+trait IncludePathRelation {
+  def relationshipAccessor[T](o: Any): T
+  def right: IncludePathCommon
 }
 
-trait IncludePathBase {
-  def relationshipAccessor[T](o: Any): T
-  def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression
-  def joinedQueryable: JoinedQueryable[_]
-  def leftType: ClassTag[_]
-  def rightType: ClassTag[_]
+trait IncludePathCommon {
+  def classType: ClassTag[_]
+  def relations: Seq[IncludePathRelation]
+  def table: Table[_]
+  def schema: Schema
 
   protected def tableFor[A]()(implicit s: Schema, aClass: ClassTag[A]): Table[A] = {
     s.findAllTablesFor(aClass.runtimeClass).head.asInstanceOf[Table[A]]
@@ -36,56 +40,74 @@ trait IncludePathBase {
   }
 }
 
-object Path {
-  implicit class ObjectToPath[M](r: M) {
-    def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
-    def members(i: (M => IncludePathBase)*): IncludePathBase = ??? //new OneToManyIncludePath[M, Any](null)
+trait IncludePathSelector[M] {
+  def to[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePathRelation  = {
+    val rightNode = new IncludePathNode[P](null)
+    new OneToManyIncludePathRelation[M, P](i, rightNode)
   }
 
-  implicit class OneToManyToPath[M](r: OneToMany[M]) {
-    def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePath[M, P](i)
-//    def member[P](i: M => IncludePath[P]): IncludePath[P] = new OneToManyIncludePath[M, P](null)
-//    def members(i: (M => OneToMany[_])*): IncludePath[_] = new OneToManyIncludePath[M, Any](null)
-    def members(i: (M => IncludePathBase)*): IncludePathBase = ??? //new OneToManyIncludePath[M, Any](null)
-  }
+  def members(i: (IncludePathSelector[M] => IncludePathRelation)*)(implicit schema: Schema, mClass: ClassTag[M]): IncludePathCommon =
+    new IncludePathNode[M](i.map(_.apply(new IncludePathSelector[M] {})))
+}
+
+object Path {
+  implicit class ObjectToPath[M](r: M) extends IncludePathSelector[M]
+
+//  implicit class OneToManyToPath[M](r: OneToMany[M]) {
+//    def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePathRelation[M, P](i, new IncludePathNode[M](null), new IncludePathNode[P](null))
+////    def member[P](i: M => IncludePath[P]): IncludePath[P] = new OneToManyIncludePath[M, P](null)
+////    def members(i: (M => OneToMany[_])*): IncludePath[_] = new OneToManyIncludePath[M, Any](null)
+//    def members(i: (M => IncludePathRelation)*): IncludePathRelation = ??? //new OneToManyIncludePath[M, Any](null)
+//  }
+
+//  implicit def OneToManyToIncludePath[P](otm: OneToMany[P]): IncludePathBase = {
+//
+//  }
 
 //  implicit class OneToManyToIncludePath[M](r: M) {
 //
 //  }
 
-//  implicit def OneToManyAccessorToIncludePath[P](i: _ => OneToMany[P]): IncludePath[P] = new OneToManyIncludePath[_, P](i)
+  implicit def OneToManyAccessorToIncludePath[P, M](i: P => OneToMany[M]): IncludePathRelation = ???
 }
 
-class OneToManyIncludePath[M, P](accessor: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]) extends IncludePath[P] {
-  val pTable = s.findAllTablesFor(pClass.runtimeClass).head
+class OneToManyIncludePathRelation[M, P](accessor: M => OneToMany[P], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], pClass: ClassTag[P]) extends IncludePathRelation {
+  val table = schema.findAllTablesFor(pClass.runtimeClass).head
   
   def relationshipAccessor[T](o: Any): T = accessor(o.asInstanceOf[M]).asInstanceOf[T]
 
   def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression =
-    s.findRelationsFor(mClass.runtimeClass.asInstanceOf[Class[M]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(o.asInstanceOf[M], m.asInstanceOf[Option[Any]].get)
+    schema.findRelationsFor(mClass.runtimeClass.asInstanceOf[Class[M]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(o.asInstanceOf[M], m.asInstanceOf[Option[Any]].get)
 
-  val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](pTable.asInstanceOf[Queryable[Any]], "left")
+  val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](table.asInstanceOf[Queryable[Any]], "left")
 
-  def leftType: ClassTag[_] = mClass
+  def classType: ClassTag[_] = pClass
 
-  def rightType: ClassTag[_] = pClass
+  def relations: Seq[IncludePathRelation] = Seq()
 }
 
-class EnclosingIncludePath[M](accessor: M => IncludePathBase)(implicit s: Schema, mClass: ClassTag[M]) extends IncludePathBase {
-  private val table = tableFor[M]()
+class IncludePathNode[M](override val relations: Seq[IncludePathRelation])(implicit override val schema: Schema, mClass: ClassTag[M])
+  extends IncludePathCommon {
+  val table = tableFor[M]()
   private val sample = sampleFor[M](table)
-  private val includePath = accessor(sample)
 
-  def relationshipAccessor[T](o: Any): T = includePath.relationshipAccessor(o)
-
-  def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression = includePath.equalityExpressionAccessor(o, m)
-
-  def leftType: ClassTag[_] = mClass
-
-  def rightType: ClassTag[_] = includePath.rightType
-
-  def joinedQueryable: JoinedQueryable[_] = includePath.joinedQueryable
+  def classType: ClassTag[_] = mClass
 }
+
+//class AdjacentIncludePath[M](includePaths: Seq[IncludePathRelation])(implicit override val schema: Schema, mClass: ClassTag[M]) extends IncludePathRelation {
+//
+//  def relationshipAccessor[T](o: Any): T = ???
+//
+//  def classType: ClassTag[_] = mClass
+//
+//  def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression = ???
+//
+//  def joinedQueryable: JoinedQueryable[_] = ???
+//
+//  override def children: Seq[IncludePathRelation] = includePaths
+//
+//  val table: Table[_] = tableFor[M]()
+//}
 
 //
 //import org.squeryl.Schema

@@ -15,14 +15,13 @@
  ***************************************************************************** */
 package org.squeryl.dsl
 
-import org.squeryl.dsl.ast._
-import boilerplate._
-import org.squeryl.dsl.fsm.{IncludePathBase, IncludePath, IncludedPropertiesQueryYield}
-import org.squeryl.dsl.internal.{JoinedQueryable, OuterJoinedQueryable}
-import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper}
 import java.sql.ResultSet
 
-import org.squeryl.{View, Table, Schema, Query}
+import org.squeryl.dsl.ast._
+import org.squeryl.dsl.boilerplate._
+import org.squeryl.dsl.fsm.{IncludePathCommon, IncludedPropertiesQueryYield}
+import org.squeryl.internals.ResultSetMapper
+import org.squeryl.{Query, Schema}
 
 import scala.reflect.ClassTag
 
@@ -43,11 +42,11 @@ trait QueryYield[R] {
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
 
   //Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])] = Seq()
-  protected [squeryl] def includeExpressions: Option[IncludePathBase] = None
+  protected [squeryl] def includeExpressions: Option[IncludePathCommon] = None
 
 //  def include[P](inclusion: R => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
 //  def includeDescendants[P](inclusion: (R) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
-  def include(i: R => IncludePathBase)(implicit s: Schema, rClass: ClassTag[R]/*, pClass: ClassTag[_]*/) : IncludedPropertiesQueryYield[R]
+  def include(i: IncludePathCommon)(implicit s: Schema, rClass: ClassTag[R]/*, pClass: ClassTag[_]*/) : IncludedPropertiesQueryYield[R]
 
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)

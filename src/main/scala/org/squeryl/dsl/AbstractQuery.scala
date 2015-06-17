@@ -16,26 +16,74 @@
 package org.squeryl.dsl
 
 import ast._
-import internal.{InnerJoinedQueryable, OuterJoinedQueryable}
+import org.squeryl.dsl.internal.{JoinedQueryable, InnerJoinedQueryable, OuterJoinedQueryable}
 import java.sql.ResultSet
-import org.squeryl.dsl.fsm.{IncludePathBase, IncludePath}
+import org.squeryl.dsl.fsm._
 import org.squeryl.internals._
 import org.squeryl._
 import collection.mutable.ArrayBuffer
 import org.squeryl.logging._
 import java.io.Closeable
 
+import scala.collection.immutable.HashMap
+
 abstract class AbstractQuery[R](
     val isRoot:Boolean,
     private [squeryl] val unions: List[(String, Query[R])]
   ) extends Query[R] {
 
-  lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) Seq(includeSubQueryable) else Seq()
+//  protected lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) Seq(includeSubQueryable) else Seq()
 
-  lazy val includeSubQueryable = createSubQueryable(sampleYield.includeExpressions.get.joinedQueryable)
-  private def subQueryableFor(includePath: IncludePathBase): SubQueryable[_] = {
-    includeSubQueryable
+  private var subQueryableHashMap = new HashMap[Queryable[_], SubQueryable[_]]()
+  private def createOrFindSubqueryable[U](q: Queryable[U]): SubQueryable[U] = {
+    {if(subQueryableHashMap.contains(q)) {
+      subQueryableHashMap(q)
+    } else {
+      val subQueryable = createSubQueryable(q).asInstanceOf[SubQueryable[_]]
+      subQueryableHashMap = subQueryableHashMap + (q -> subQueryable)
+      subQueryable
+    }}.asInstanceOf[SubQueryable[U]]
   }
+
+  protected lazy val includedSubQueryables: Iterable[SubQueryable[_]] = {
+    expandedIncludes
+    subQueryableHashMap.map(_._2)
+  }
+
+  protected lazy val expandedIncludes = sampleYield.includeExpressions.map(left => {
+
+    val (leftTable, leftSubQueryable) = (left.table, createOrFindSubqueryable(left.table))
+    val adjacentMembers =
+      left.relations.map(includeRelation => {
+        val right = includeRelation.right
+        val (rightTable, rightSubQueryable) = (right.table, createOrFindSubqueryable(right.table))
+        val squerylRelation = left.schema.findRelationsFor(left.classType.runtimeClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(leftSubQueryable.sample, rightSubQueryable.sample.asInstanceOf[Any])
+
+        val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
+
+        val joinedQueryable: JoinedQueryable[_] =
+        includeRelation match {
+          case m: OneToManyIncludePathRelation[_, _] => {
+            new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
+          }
+        }
+
+      (rightSubQueryable, joinedQueryable, joinLogicalBoolean)
+    })
+
+    (leftSubQueryable, adjacentMembers)
+  }).toList
+
+  case class IncludePathWithSubquery(includePath: IncludePathRelation)
+
+  //private val includePathTree
+
+
+
+//  lazy val includeSubQueryable = createSubQueryable(sampleYield.includeExpressions.get.joinedQueryable)
+//  private def subQueryableFor(includePath: IncludePathBase): SubQueryable[_] = {
+//    includeSubQueryable
+//  }
 
   def sampleYield: QueryYield[R]
   
@@ -103,16 +151,15 @@ abstract class AbstractQuery[R](
     val subQueryableCollection =
     if(qy.includeExpressions.nonEmpty) {
       val leftQuery = subQueryables.head
-      val includes = qy.includeExpressions.get
 //      val expanded = qy.includeExpressions.zipWithIndex.map{ case (x, i) =>
 //        val queryable = this.includes(i)
 //        (queryable, x._1.map(a => a._2.apply(leftQuery.sample, queryable.sample)))
 //      }
 //      val includeQueryables = expanded.map(_._1)
       //val includeJoinExpressions = expanded.flatMap(x => x._2.map(y => () => y))
-      val subqueryable = subQueryableFor(includes)
-      qy.joinExpressions = Seq(() => includes.equalityExpressionAccessor(leftQuery.sample, subqueryable.sample)) //includeJoinExpressions
-      subQueryables ++ Seq(subqueryable)
+
+      qy.joinExpressions = expandedIncludes.flatMap(_._2).map(_._3) //Seq(() => includes.equalityExpressionAccessor(leftQuery.sample, subqueryable.sample)) //includeJoinExpressions
+      subQueryables ++ includedSubQueryables
     } else {
       subQueryables
     }
@@ -211,7 +258,7 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, IncludePathBase)])]) extends Iterator[R] {
+  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, IncludePathRelation)])]) extends Iterator[R] {
     private val structuredData =
       data
         .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
@@ -220,8 +267,8 @@ abstract class AbstractQuery[R](
           t._2
             .flatMap(_._2)
             .groupBy(g => g._2)
-            .foreach(otm => otm._1
-            .relationshipAccessor[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList))
+            .foreach(otm => otm._2.foreach(
+            _._2.relationshipAccessor[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
           r
         }).toList
     private val iterator = structuredData.iterator
@@ -258,7 +305,7 @@ abstract class AbstractQuery[R](
             (give(resultSetMapper, rs),
               (sampleYield.includeExpressions.zipWithIndex.map { case (e, i) =>
 
-                (subQueryableFor(e).give(rs), e)
+                (createOrFindSubqueryable(e.table).give(rs), e.relations.head)
               }).toSeq)
           }
         ).toList

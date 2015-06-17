@@ -76,7 +76,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
     }
 
     assert(data.employees.size == 1)
@@ -93,7 +93,7 @@ class IncludeTest extends DbTestBase {
       val c1 = IncludeSchema.employees.insert(new Employee("child1", p.id))
       val c2 = IncludeSchema.employees.insert(new Employee("child2", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
     }
 
     assert(data.employees.size == 2)
@@ -111,7 +111,7 @@ class IncludeTest extends DbTestBase {
       val c1 = IncludeSchema.employees.insert(new Employee("child1", p1.id))
       val c2 = IncludeSchema.employees.insert(new Employee("child2", p2.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).toList
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).toList
     }
 
     assert(data.size == 2)
@@ -126,7 +126,7 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).toList
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).toList
     }
 
     assert(data.size == 0)
@@ -142,7 +142,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
     }
 
     assert(data.employees.size == 1)
@@ -158,7 +158,7 @@ class IncludeTest extends DbTestBase {
     val data = transaction {
       val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
     }
 
     assert(data.employees.size == 0)
@@ -174,7 +174,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      val data = from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
 
       data.employees.deleteAll
 
@@ -192,7 +192,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = new Employee("child", p.id)
 
-      val data = from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head
 
       data.employees.associate(c)
 
@@ -209,7 +209,8 @@ class IncludeTest extends DbTestBase {
     val (p, data) = transaction {
       val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      (p, from(IncludeSchema.managers)(p => select(p) include(_.member(_.employees))).head)
+      //enclosing => adjacent => onetomany
+      (p, from(IncludeSchema.managers)(p => select(p) include(p.members(_.to(_.employees)))).head)
     }
     val c = new Employee("child", p.id)
 
@@ -242,7 +243,7 @@ class IncludeTest extends DbTestBase {
 
   // begin Nested Include tests
 
-  test("include oneToMany - nested relation") {
+  test("include oneToMany - can retrieve two adjacent properties") {
     implicit val schema = IncludeSchema
     transaction {
       IncludeSchema.reset
@@ -251,15 +252,20 @@ class IncludeTest extends DbTestBase {
     val data = transaction {
       val m = IncludeSchema.managers.insert(new Manager("person"))
       val e = IncludeSchema.employees.insert(new Employee("child", m.id))
-      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
 
       from(IncludeSchema.managers)(p => select(p)
-//        include(_.members(_.employees.member(_.benefits.member(_.categories)),
-//                         _.responsibilities))
-        include(_.members(_.employees.members(_.benefits.members(_.member(_.categories))), _.member(_.responsibilities)))).head
+//        include(_.adjacent(_.employees.member(_.benefits.member(_.categories)),
+//                         _.member(_.responsibilities))).head
+//        include(p.members(_.employees.members(_.benefits.members(_.member(_.categories))), _.member(_.responsibilities)))).head
+      include(p.members(_.to(_.employees)))).head
+//        include(_.adjacent(_.member(_.employees), _.member(_.responsibilities)))).head
+      //include(p.members(_.memberOffers.members(_.member(offers), _.member(hotelReservation), _.member(_.offerOption)),
+      //                  _.member(_.addr)))
     }
 
-    assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.size == 1)
+    assert(data.responsibilities.size == 1)
   }
 
   //end Nested Include tests

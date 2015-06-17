@@ -106,7 +106,7 @@ class BaseQueryYield[G]
           else b
       }
 
-  def include(inclusion: G => IncludePathBase)(implicit s: Schema, gClass: ClassTag[G] /*,pClass: ClassTag[_]*/) = {
+  def include(inclusion: IncludePathCommon)(implicit s: Schema, gClass: ClassTag[G] /*,pClass: ClassTag[_]*/) = {
 //    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[_]]
 
     /*val includeExpressions = this.includeExpressions ++ Seq(
@@ -114,7 +114,7 @@ class BaseQueryYield[G]
         (r: Any, p: Any) => s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[Any]].get))),
         inclusion.asInstanceOf[Any => IncludePath[Any]]))*/
 
-    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(new EnclosingIncludePath[G](inclusion)))
+    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(inclusion))
   }
 
   private def sampleFor[A](a: Table[A])(implicit s: Schema): A = {
@@ -360,6 +360,6 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 class IncludedPropertiesQueryYield[R](
                                        val qe: QueryElements[_],
                                        val sc: ()=>R,
-                                       override val includeExpressions: Option[IncludePathBase])
+                                       override val includeExpressions: Option[IncludePathCommon])
   extends BaseQueryYield[R](qe, sc) {
 }

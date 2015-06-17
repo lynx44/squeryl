@@ -32,7 +32,7 @@ class Query1[T1,R]
   def invokeYield(rsm: ResultSetMapper, rs: ResultSet): R =
     f(sq1.give(rs)).invokeYield(rsm, rs)
 
-  val ast = buildAst(sampleYield, (if(sq1 != null) Seq(sq1) else Seq() ++ includes):_*)
+  val ast = buildAst(sampleYield, (if(sq1 != null) Seq(sq1) else Seq() ++ includedSubQueryables):_*)
 
   lazy val sampleYield: QueryYield[R] = f(sq1.sample)
 }
