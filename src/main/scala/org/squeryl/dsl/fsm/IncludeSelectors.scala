@@ -41,7 +41,7 @@ trait IncludePathCommon {
 }
 
 trait IncludePathSelector[M] {
-  def to[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePathRelation  = {
+  def ->[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePathRelation  = {
     val rightNode = new IncludePathNode[P](null)
     new OneToManyIncludePathRelation[M, P](i, rightNode)
   }
