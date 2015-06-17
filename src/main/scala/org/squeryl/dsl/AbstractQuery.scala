@@ -72,7 +72,7 @@ abstract class AbstractQuery[R](
 
         val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
 
-      (rightSubQueryable, joinedQueryable, joinLogicalBoolean)
+      (rightSubQueryable, joinedQueryable, joinLogicalBoolean, includeRelation)
     })
 
     (leftSubQueryable, adjacentMembers)
@@ -273,7 +273,8 @@ abstract class AbstractQuery[R](
             .flatMap(_._2)
             .groupBy(g => g._2)
             .foreach(otm => otm._2.foreach(
-            _._2.relationshipAccessor[OneToMany[Any]](r).fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
+            _._2.relationshipAccessor[OneToMany[Any]](r)
+              .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
           r
         }).toList
     private val iterator = structuredData.iterator
@@ -308,10 +309,10 @@ abstract class AbstractQuery[R](
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
             (give(resultSetMapper, rs),
-              (sampleYield.includeExpressions.zipWithIndex.map { case (e, i) =>
+              (expandedIncludes.flatMap(_._2).map(e => {
 
-                (createOrFindSubqueryable(e.table).give(rs), e.relations.head)
-              }).toSeq)
+                (createOrFindSubqueryable(e._2).give(rs), e._4)
+              }).toSeq))
           }
         ).toList
         Some(new IncludeIterable[R](valueMap))
