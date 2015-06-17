@@ -156,15 +156,10 @@ abstract class AbstractQuery[R](
     val subQueryableCollection =
     if(qy.includeExpressions.nonEmpty) {
       val leftQuery = subQueryables.head
-//      val expanded = qy.includeExpressions.zipWithIndex.map{ case (x, i) =>
-//        val queryable = this.includes(i)
-//        (queryable, x._1.map(a => a._2.apply(leftQuery.sample, queryable.sample)))
-//      }
-//      val includeQueryables = expanded.map(_._1)
-      //val includeJoinExpressions = expanded.flatMap(x => x._2.map(y => () => y))
 
-      qy.joinExpressions = expandedIncludes.flatMap(_._2).map(_._3) //Seq(() => includes.equalityExpressionAccessor(leftQuery.sample, subqueryable.sample)) //includeJoinExpressions
-      includedSubQueryables
+      val subQueryableAndJoinClause = expandedIncludes.flatMap(_._2).map(x => (x._1, x._3))
+      qy.joinExpressions = subQueryableAndJoinClause.map(_._2)
+      subQueryables ++ subQueryableAndJoinClause.map(_._1)
     } else {
       subQueryables
     }
