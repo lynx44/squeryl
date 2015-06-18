@@ -50,45 +50,49 @@ abstract class AbstractQuery[R](
   }
 
   protected lazy val includedSubQueryables: Iterable[SubQueryable[_]] = {
-    expandedIncludes
+    joinedIncludes
     subQueryableHashMap.map(_._2).toList
   }
 
-  protected lazy val expandedIncludes = sampleYield.includeExpressions.map(expandIncludesRecursive(_))
+  protected lazy val joinedIncludes = sampleYield.includeExpressions.map(includeExpressionToJoinExpressionAdjacentRecursive(_))
 
-  private def expandIncludesRecursive(left: IncludePathCommon): JoinedIncludePath = {
+  private def includeExpressionToJoinExpressionAdjacentRecursive(left: IncludePathCommon): JoinedIncludePath = {
     val (leftTable, leftSubQueryable) = (left.table, createOrFindSubqueryable(left.table))
     val adjacentMembers =
       left.relations.map(includeRelation => {
-        val right = includeRelation.right
-        val rightTable = right.table
-        val joinedQueryable: JoinedQueryable[_] =
-          includeRelation match {
-            case m: OneToManyIncludePathRelation[_, _] => {
-              new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
-            }
-          }
-        val rightSubQueryable = createOrFindSubqueryable(joinedQueryable)
-        val squerylRelation = left.schema.findRelationsFor(left.classType.runtimeClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(leftSubQueryable.sample, rightSubQueryable.sample.asInstanceOf[Option[Any]].get)
-
-        val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
-
-        val relations =
-          if(right.relations != null)
-            right.relations.map(x => expandIncludesRecursive(x.right))
-          else
-            Seq()
-
-        JoinedIncludePath(rightSubQueryable, joinedQueryable, joinLogicalBoolean, includeRelation, relations)
+        includeRelationToJoinExpressionRecursive(leftSubQueryable, left.classType.runtimeClass, includeRelation)
       })
 
-    JoinedIncludePath(leftSubQueryable, null, null, null, adjacentMembers)
+    JoinedIncludePath(leftSubQueryable, None, None, None, adjacentMembers)
+  }
+
+  private def includeRelationToJoinExpressionRecursive(leftSubqueryable: SubQueryable[_], leftClass: Class[_], includeRelation: IncludePathRelation): JoinedIncludePath = {
+    val right = includeRelation.right
+    val rightTable = right.table
+    val joinedQueryable: JoinedQueryable[_] =
+      includeRelation match {
+        case m: OneToManyIncludePathRelation[_, _] => {
+          new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
+        }
+      }
+    val rightSubQueryable = createOrFindSubqueryable(joinedQueryable)
+    val squerylRelation = right.schema.findRelationsFor(leftClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(if(leftSubqueryable.sample.isInstanceOf[Option[Any]]) leftSubqueryable.sample.asInstanceOf[Option[Any]].get else leftSubqueryable.sample, rightSubQueryable.sample.asInstanceOf[Option[Any]].get)
+
+    val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
+
+    val relations =
+      if(right.relations != null)
+        right.relations.map(x => includeRelationToJoinExpressionRecursive(rightSubQueryable, right.classType.runtimeClass, x))
+      else
+        Seq()
+
+    JoinedIncludePath(rightSubQueryable, Some(joinedQueryable), Some(joinLogicalBoolean), Some(includeRelation), relations)
   }
 
   case class JoinedIncludePath(subQueryable: SubQueryable[_],
-                                joinedQueryable: JoinedQueryable[_],
-                                joinCondition: () => LogicalBoolean,
-                                includePathRelation: IncludePathRelation,
+                                joinedQueryable: Option[JoinedQueryable[_]],
+                                joinCondition: Option[() => LogicalBoolean],
+                                includePathRelation: Option[IncludePathRelation],
                                 relations: Seq[JoinedIncludePath])
 
   //private val includePathTree
@@ -165,12 +169,29 @@ abstract class AbstractQuery[R](
     val views = new ArrayBuffer[ViewExpressionNode[_]]
 
     val subQueryableCollection =
-    if(qy.includeExpressions.nonEmpty) {
+    if(joinedIncludes.nonEmpty) {
       val leftQuery = subQueryables.head
 
-      val subQueryableAndJoinClause = expandedIncludes.map(x => x.relations.map(x => (x.subQueryable, x.joinCondition))).getOrElse(Seq())
-      qy.joinExpressions = subQueryableAndJoinClause.map(_._2)
-      subQueryables ++ subQueryableAndJoinClause.map(_._1)
+      def walkAndCollect(leftQueryable: SubQueryable[_], left: JoinedIncludePath, collected: Seq[(SubQueryable[_])]):
+        Seq[(SubQueryable[_])] = {
+
+        val newCollection =
+          if(left.relations != null)
+            left.relations.flatMap(walkAndCollect(left.subQueryable, _, collected))
+          else
+            Seq()
+
+        if(left.joinedQueryable.nonEmpty) {
+          qy.joinExpressions ++= Seq(left.joinCondition.get)
+          left.subQueryable.node.joinExpression = Some(left.joinCondition.get())
+          newCollection ++ collected ++ Seq(left.subQueryable)
+        }
+        else
+          newCollection ++ collected
+      }
+
+      val subQueryableAndJoinClause = walkAndCollect(null, joinedIncludes.get, Seq()).reverse
+      subQueryables ++ subQueryableAndJoinClause
     } else {
       subQueryables
     }
@@ -183,7 +204,9 @@ abstract class AbstractQuery[R](
       while(sqIterator.hasNext) {
         val nthQueryable = sqIterator.next
         val nthJoinExpr = joinExprsIterator.next
-        nthQueryable.node.joinExpression = Some(nthJoinExpr())
+        if(nthQueryable.node.joinExpression.isEmpty) {
+          nthQueryable.node.joinExpression = Some(nthJoinExpr())
+        }
       }
     }
 
@@ -315,10 +338,10 @@ abstract class AbstractQuery[R](
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
             (give(resultSetMapper, rs),
-              (expandedIncludes.toSeq.flatMap(_.relations).map(e => {
+              (joinedIncludes.toSeq.flatMap(_.relations).map(e => {
 
-                (createOrFindSubqueryable(e.joinedQueryable).give(rs), e.includePathRelation)
-              }).toSeq))
+                (createOrFindSubqueryable(e.joinedQueryable.get).give(rs), e.includePathRelation.get)
+              })))
           }
         ).toList
         Some(new IncludeIterable[R](valueMap))
