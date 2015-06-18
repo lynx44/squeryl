@@ -315,7 +315,7 @@ abstract class AbstractQuery[R](
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
             (give(resultSetMapper, rs),
-              (expandedIncludes.map(e => {
+              (expandedIncludes.toSeq.flatMap(_.relations).map(e => {
 
                 (createOrFindSubqueryable(e.joinedQueryable).give(rs), e.includePathRelation)
               }).toSeq))
