@@ -303,8 +303,8 @@ abstract class AbstractQuery[R](
         })
 
         val groupedColumns = columns.map(i =>
-          i.groupBy(g =>
-            (g.parent.map(_.id).getOrElse(None), g.entity.get.id)))
+            i.groupBy(g =>
+            (g.parent.map(_.id).getOrElse(None), g.entity.map(_.id).getOrElse(None))))
 
         for(i <- 0 to columnCount - 1) {
           val columnGroup = groupedColumns(i)
@@ -321,7 +321,7 @@ abstract class AbstractQuery[R](
             .foreach(parentGroup => {
             val entities = parentGroup._2.map(_._1._2.entity)
             val iterableRow = parentGroup._2.head._1._2
-            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get)
+            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get).toList
             val relationship = iterableRow.includePathRelation.get.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
             relationship.fill(fillEntities)
           })
