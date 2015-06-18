@@ -21,6 +21,12 @@ class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] 
 
 class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
+
+  lazy val types = IncludeSchema.responsibility_responsibilityType_relation.left(this)
+}
+
+class ResponsibilityType(val name: String, val responsibilityId: Long) extends KeyedEntity[Long] {
+  val id: Long = 0
 }
 
 class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
@@ -37,11 +43,13 @@ object IncludeSchema extends Schema {
   val managers = table[Manager]
   val employees = table[Employee]
   val responsibilities = table[Responsibility]
+  val responsibilityTypes = table[ResponsibilityType]
   val benefits = table[Benefit]
   val categories = table[Category]
 
   val manager_employee_relation = oneToManyRelation(managers, employees).via((m, e) => m.id === e.managerId)
   val manager_responsibility_relation = oneToManyRelation(managers, responsibilities).via((m, r) => m.id === r.managerId)
+  val responsibility_responsibilityType_relation = oneToManyRelation(responsibilities, responsibilityTypes).via((r, t) => r.id === t.responsibilityId)
   val employee_benefit_relation = oneToManyRelation(employees, benefits).via((e, b) => e.id === b.employeeId)
   val benefit_category_relation = oneToManyRelation(benefits, categories).via((b, c) => b.id === c.benefitId)
 
@@ -257,6 +265,53 @@ class IncludeTest extends DbTestBase {
 
     assert(data.employees.size == 1)
     assert(data.employees.head.benefits.size == 1)
+  }
+
+  test("include oneToMany - can retrieve two nested properties with correct assignments") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e1 = IncludeSchema.employees.insert(new Employee("child1", m.id))
+      val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
+      val e2 = IncludeSchema.employees.insert(new Employee("child2", m.id))
+      val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(p.->>(_.->(_.employees).->(_.benefits)))).head
+    }
+
+    assert(data.employees.size == 2)
+    assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.head.benefits.head.name == "benefit1")
+    assert(data.employees.last.benefits.size == 1)
+    assert(data.employees.last.benefits.head.name == "benefit2")
+  }
+
+  test("include oneToMany - can retrieve nested properties on adjacent properties with correct assignments") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
+      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
+      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(p.->>(_.->(_.employees).->(_.benefits), _.->(_.responsibilities).->(_.types)))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.employees.head.benefits.size == 1)
+    assert(data.responsibilities.size == 1)
+    assert(data.responsibilities.head.types.size == 1)
   }
 
   //end Nested Include tests
