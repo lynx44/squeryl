@@ -62,7 +62,7 @@ object Path {
       val allPaths = i.map(_(pb))
       val node = new IncludePathNode[M]()
 
-      node._relations = allPaths.flatMap(_.relations)
+      node._relations = allPaths.flatMap(_.relations).distinct
       node
     }
 //      new IncludePathNode[M](i.map(_.apply(new IncludePathSelector[M] {
