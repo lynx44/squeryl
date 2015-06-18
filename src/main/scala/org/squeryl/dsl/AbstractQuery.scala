@@ -54,8 +54,9 @@ abstract class AbstractQuery[R](
     subQueryableHashMap.map(_._2).toList
   }
 
-  protected lazy val expandedIncludes = sampleYield.includeExpressions.map(left => {
+  protected lazy val expandedIncludes = sampleYield.includeExpressions.map(expandIncludesRecursive(_))
 
+  private def expandIncludesRecursive(left: IncludePathCommon): JoinedIncludePath = {
     val (leftTable, leftSubQueryable) = (left.table, createOrFindSubqueryable(left.table))
     val adjacentMembers =
       left.relations.map(includeRelation => {
@@ -72,13 +73,23 @@ abstract class AbstractQuery[R](
 
         val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
 
-      (rightSubQueryable, joinedQueryable, joinLogicalBoolean, includeRelation)
-    })
+        val relations =
+          if(right.relations != null)
+            right.relations.map(x => expandIncludesRecursive(x.right))
+          else
+            Seq()
 
-    (leftSubQueryable, adjacentMembers)
-  }).toList
+        JoinedIncludePath(rightSubQueryable, joinedQueryable, joinLogicalBoolean, includeRelation, relations)
+      })
 
-  case class IncludePathWithSubquery(includePath: IncludePathRelation)
+    JoinedIncludePath(leftSubQueryable, null, null, null, adjacentMembers)
+  }
+
+  case class JoinedIncludePath(subQueryable: SubQueryable[_],
+                                joinedQueryable: JoinedQueryable[_],
+                                joinCondition: () => LogicalBoolean,
+                                includePathRelation: IncludePathRelation,
+                                relations: Seq[JoinedIncludePath])
 
   //private val includePathTree
 
@@ -157,7 +168,7 @@ abstract class AbstractQuery[R](
     if(qy.includeExpressions.nonEmpty) {
       val leftQuery = subQueryables.head
 
-      val subQueryableAndJoinClause = expandedIncludes.flatMap(_._2).map(x => (x._1, x._3))
+      val subQueryableAndJoinClause = expandedIncludes.map(x => x.relations.map(x => (x.subQueryable, x.joinCondition))).getOrElse(Seq())
       qy.joinExpressions = subQueryableAndJoinClause.map(_._2)
       subQueryables ++ subQueryableAndJoinClause.map(_._1)
     } else {
@@ -304,9 +315,9 @@ abstract class AbstractQuery[R](
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
             (give(resultSetMapper, rs),
-              (expandedIncludes.flatMap(_._2).map(e => {
+              (expandedIncludes.map(e => {
 
-                (createOrFindSubqueryable(e._2).give(rs), e._4)
+                (createOrFindSubqueryable(e.joinedQueryable).give(rs), e.includePathRelation)
               }).toSeq))
           }
         ).toList
