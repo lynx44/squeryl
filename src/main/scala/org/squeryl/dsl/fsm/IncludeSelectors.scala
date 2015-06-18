@@ -22,7 +22,8 @@ trait IncludePathRelation {
 
 trait IncludePathCommon {
   def classType: ClassTag[_]
-  def relations: Seq[IncludePathRelation]
+  def relations: Seq[IncludePathRelation] = _relations
+  var _relations: Seq[IncludePathRelation] = Seq()
   def table: Table[_]
   def schema: Schema
 
@@ -41,17 +42,33 @@ trait IncludePathCommon {
 }
 
 trait IncludePathSelector[M] {
-  def ->[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePathRelation  = {
-    val rightNode = new IncludePathNode[P](null)
-    new OneToManyIncludePathRelation[M, P](i, rightNode)
-  }
+  def ->[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): PathBuilder[P] //= {
+//    val rightNode = new IncludePathNode[P](null)
+//    val relation = new OneToManyIncludePathRelation[M, P](i, _relations.lastOption.map(_.right).getOrElse(null), rightNode)
+//    this._relations ++= Seq(relation)
+//    relation
+//    new PathBuilder[P](new IncludePathNode[M](Seq()))
+//  }
 
   def members(i: (IncludePathSelector[M] => IncludePathRelation)*)(implicit schema: Schema, mClass: ClassTag[M]): IncludePathCommon =
-    new IncludePathNode[M](i.map(_.apply(new IncludePathSelector[M] {})))
+    new IncludePathNode[M]()
 }
 
 object Path {
-  implicit class ObjectToPath[M](r: M) extends IncludePathSelector[M]
+  implicit class ObjectToPath[M](r: M)
+  {
+    def ->>(i: (PathBuilder[M] => PathBuilder[_])*)(implicit schema: Schema, mClass: ClassTag[M]): IncludePathCommon = {
+      val pb = new PathBuilder[M](new IncludePathNode[M](), Seq())
+      val allPaths = i.map(_(pb))
+      val node = new IncludePathNode[M]()
+
+      node._relations = allPaths.flatMap(_.relations)
+      node
+    }
+//      new IncludePathNode[M](i.map(_.apply(new IncludePathSelector[M] {
+//        def left: IncludePathCommon = null
+//      })))
+  }
 
 //  implicit class OneToManyToPath[M](r: OneToMany[M]) {
 //    def member[P](i: M => OneToMany[P])(implicit s: Schema, mClass: ClassTag[M], pClass: ClassTag[P]): IncludePath[P] = new OneToManyIncludePathRelation[M, P](i, new IncludePathNode[M](null), new IncludePathNode[P](null))
@@ -71,7 +88,32 @@ object Path {
   implicit def OneToManyAccessorToIncludePath[P, M](i: P => OneToMany[M]): IncludePathRelation = ???
 }
 
-class OneToManyIncludePathRelation[M, P](accessor: M => OneToMany[P], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], pClass: ClassTag[P]) extends IncludePathRelation {
+class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelation])
+  extends IncludePathSelector[P]
+  with IncludePathCommon {
+
+    private val lastPath = allRelations.lastOption.map(_.right).getOrElse(head)
+
+    override def ->[A](i: (P) => OneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
+      val rightNode = new IncludePathNode[A]()
+      val relation = new OneToManyIncludePathRelation[P, A](i, rightNode)
+
+      lastPath._relations ++= Seq(relation)
+
+      new PathBuilder[A](head, allRelations ++ Seq(relation))
+    }
+
+    def classType: ClassTag[_] = head.classType
+
+    override def relations: Seq[IncludePathRelation] = head.relations
+
+    def table: Table[_] = head.table
+
+    def schema: Schema = head.schema
+}
+
+class OneToManyIncludePathRelation[M, P](accessor: M => OneToMany[P], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], pClass: ClassTag[P])
+  extends IncludePathRelation {
   val table = schema.findAllTablesFor(pClass.runtimeClass).head
   
   def relationshipAccessor[T](o: Any): T = accessor(o.asInstanceOf[M]).asInstanceOf[T]
@@ -82,11 +124,9 @@ class OneToManyIncludePathRelation[M, P](accessor: M => OneToMany[P], override v
   val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](table.asInstanceOf[Queryable[Any]], "left")
 
   def classType: ClassTag[_] = pClass
-
-  def relations: Seq[IncludePathRelation] = Seq()
 }
 
-class IncludePathNode[M](override val relations: Seq[IncludePathRelation])(implicit override val schema: Schema, mClass: ClassTag[M])
+class IncludePathNode[M]()(implicit override val schema: Schema, mClass: ClassTag[M])
   extends IncludePathCommon {
   val table = tableFor[M]()
   private val sample = sampleFor[M](table)
