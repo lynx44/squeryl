@@ -292,25 +292,107 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[(R, Seq[(Any, IncludePathRelation)])]) extends Iterator[R] {
-    private val structuredData =
-      data
-        .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
-        .map(t => {
-          val r = t._2.head._1
-          t._2
-            .flatMap(_._2)
-            .groupBy(g => g._2)
-            .foreach(otm => otm._2.foreach(
-            _._2.relationshipAccessor[OneToMany[Any]](r)
-              .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
-          r
-        }).toList
+  private class IncludeIterable[R](data: Seq[Seq[IncludeIterableRow]]) extends Iterator[R] {
+    private val structuredData: Seq[R] = {
+
+      if(data.nonEmpty) {
+
+        val columnCount = data.head.length
+        val columns = (0 to columnCount - 1).map(index => {
+          data.map(_(index))
+        })
+
+        val groupedColumns = columns.map(i =>
+          i.groupBy(g =>
+            (g.parent.map(_.id).getOrElse(None), g.entity.get.id)))
+
+        for(i <- 0 to columnCount - 1) {
+          val columnGroup = groupedColumns(i)
+          val keysAndIterableRow = columnGroup.map(g => (g._1, g._2.head))
+          keysAndIterableRow.map(keyAndIterableRow => {
+            val parentGroup = groupedColumns.flatMap(
+              _.flatMap(_._2.filter(_.entity == keyAndIterableRow._2.entity).headOption).headOption)
+            val finalParent = parentGroup.flatMap(_.parent).headOption
+            //keyAndIterableRow._2.includePathRelation.get.relationshipAccessor[OneToMany[Any]](finalParent)
+            (keyAndIterableRow, finalParent)
+          })
+            .filterNot(_._2.isEmpty)
+            .groupBy(_._2)
+            .foreach(parentGroup => {
+            val entities = parentGroup._2.map(_._1._2.entity)
+            val iterableRow = parentGroup._2.head._1._2
+            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get)
+            val relationship = iterableRow.includePathRelation.get.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
+            relationship.fill(fillEntities)
+          })
+        }
+
+        groupedColumns.last.flatMap(x => x._2.map(_.entity.get.asInstanceOf[R])).toSeq
+      } else {
+        Seq()
+      }
+      }
+
+
+
+//      def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeIterableRow]):
+//      Seq[IncludeIterableRow] = {
+//
+//        val value =
+//          if(parent.nonEmpty)
+//            left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+//          else
+//            Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
+//
+//        val newCollection =
+//          if(left.relations != null)
+//            left.relations.flatMap(walkAndRead(_, value, collection))
+//          else
+//            Seq()
+//
+//        newCollection ++ collection ++ Seq(IncludeIterableRow(value, parent, left.includePathRelation))
+//      }
+//    }
+//    {
+//
+////      def walkAndCollect(leftQueryable: SubQueryable[_], left: JoinedIncludePath, collected: Seq[(SubQueryable[_])]):
+////      Seq[(SubQueryable[_])] = {
+////
+////        val newCollection =
+////          if(left.relations != null)
+////            left.relations.flatMap(walkAndCollect(left.subQueryable, _, collected))
+////          else
+////            Seq()
+////
+////        if(left.joinedQueryable.nonEmpty) {
+////          qy.joinExpressions ++= Seq(left.joinCondition.get)
+////          left.subQueryable.node.joinExpression = Some(left.joinCondition.get())
+////          newCollection ++ collected ++ Seq(left.subQueryable)
+////        }
+////        else
+////          newCollection ++ collected
+////      }
+//
+//      data
+//        .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
+//        .map(t => {
+//        val r = t._2.head._1
+//        t._2
+//          .flatMap(_._2)
+//          .groupBy(g => g._2)
+//          .foreach(otm => otm._2.foreach(
+//          _._2.relationshipAccessor[OneToMany[Any]](r)
+//            .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
+//        r
+//      }).toList
+//    }
     private val iterator = structuredData.iterator
     def hasNext: Boolean = iterator.hasNext
 
     def next(): R = iterator.next
   }
+
+  private case class IncludeIterableRow(entity: Option[KeyedEntity[_]], parent: Option[KeyedEntity[_]], includePathRelation: Option[IncludePathRelation])
 
   def iterator = new Iterator[R] with Closeable {
 
@@ -337,11 +419,26 @@ abstract class AbstractQuery[R](
       if(sampleYield.includeExpressions.nonEmpty)
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
-            (give(resultSetMapper, rs),
-              (joinedIncludes.toSeq.flatMap(_.relations).map(e => {
+          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeIterableRow]):
+            Seq[IncludeIterableRow] = {
 
-                (createOrFindSubqueryable(e.joinedQueryable.get).give(rs), e.includePathRelation.get)
-              })))
+              val value =
+                if(parent.nonEmpty)
+                  left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+                else
+                  Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
+
+              val newCollection =
+                if(left.relations != null)
+                  left.relations.flatMap(walkAndRead(_, value, collection))
+                else
+                  Seq()
+
+              newCollection ++ collection ++ Seq(IncludeIterableRow(value, parent, left.includePathRelation))
+            }
+
+            val row = walkAndRead(joinedIncludes.get, None, Seq())
+            row
           }
         ).toList
         Some(new IncludeIterable[R](valueMap))
