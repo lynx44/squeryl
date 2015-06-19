@@ -229,6 +229,6 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 class IncludedPropertiesQueryYield[R](
                                        val qe: QueryElements[_],
                                        val sc: ()=>R,
-                                       override val includeExpressions: Option[IncludePathCommon])
+                                       override val includePath: Option[IncludePathCommon])
   extends BaseQueryYield[R](qe, sc) {
 }

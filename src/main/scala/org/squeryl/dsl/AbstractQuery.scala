@@ -52,19 +52,19 @@ abstract class AbstractQuery[R](
     subQueryableHashMap.map(_._2).toList
   }
 
-  protected lazy val joinedIncludes = sampleYield.includeExpressions.map(includeExpressionToJoinExpressionAdjacentRecursive(_))
+  protected lazy val joinedIncludes = sampleYield.includePath.map(includePathToJoinExpressionAdjacentRecursive(_))
 
-  private def includeExpressionToJoinExpressionAdjacentRecursive(left: IncludePathCommon): JoinedIncludePath = {
+  private def includePathToJoinExpressionAdjacentRecursive(left: IncludePathCommon): JoinedIncludePath = {
     val (leftTable, leftSubQueryable) = (left.table, createOrFindSubqueryable(left.table))
     val adjacentMembers =
       left.relations.map(includeRelation => {
-        includeRelationToJoinExpressionRecursive(leftSubQueryable, left.classType.runtimeClass, includeRelation)
+        includeRelationToJoinIncludeRecursive(leftSubQueryable, left.classType.runtimeClass, includeRelation)
       })
 
     JoinedIncludePath(leftSubQueryable, None, None, None, adjacentMembers)
   }
 
-  private def includeRelationToJoinExpressionRecursive(leftSubqueryable: SubQueryable[_], leftClass: Class[_], includeRelation: IncludePathRelation): JoinedIncludePath = {
+  private def includeRelationToJoinIncludeRecursive(leftSubqueryable: SubQueryable[_], leftClass: Class[_], includeRelation: IncludePathRelation): JoinedIncludePath = {
     val right = includeRelation.right
     val rightTable = right.table
     val joinedQueryable: JoinedQueryable[_] =
@@ -80,7 +80,7 @@ abstract class AbstractQuery[R](
 
     val relations =
       if(right.relations != null)
-        right.relations.map(x => includeRelationToJoinExpressionRecursive(rightSubQueryable, right.classType.runtimeClass, x))
+        right.relations.map(x => includeRelationToJoinIncludeRecursive(rightSubQueryable, right.classType.runtimeClass, x))
       else
         Seq()
 
@@ -350,7 +350,7 @@ abstract class AbstractQuery[R](
     var rowCount = 0
 
     val includeIterable =
-      if(sampleYield.includeExpressions.nonEmpty)
+      if(sampleYield.includePath.nonEmpty)
       {
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
           def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeIterableRow]):

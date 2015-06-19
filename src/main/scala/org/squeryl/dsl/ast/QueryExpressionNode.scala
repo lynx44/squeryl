@@ -258,6 +258,6 @@ class QueryExpressionNode[R](val _query: AbstractQuery[R],
     }
   }
 
-  def hasIncludes = _queryYield.includeExpressions != Nil
+  def hasIncludes = _queryYield.includePath != Nil
 }
 
