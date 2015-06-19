@@ -32,8 +32,6 @@ abstract class AbstractQuery[R](
     private [squeryl] val unions: List[(String, Query[R])]
   ) extends Query[R] {
 
-//  protected lazy val includes: Seq[SubQueryable[_]] = if(sampleYield.includeExpressions.nonEmpty) Seq(includeSubQueryable) else Seq()
-
   private var subQueryableHashMap = new HashMap[Queryable[_], SubQueryable[_]]()
   private def createOrFindSubqueryable[U](q: Queryable[U]): SubQueryable[U] = {
     {if(subQueryableHashMap.contains(q)) {
@@ -94,15 +92,6 @@ abstract class AbstractQuery[R](
                                 joinCondition: Option[() => LogicalBoolean],
                                 includePathRelation: Option[IncludePathRelation],
                                 relations: Seq[JoinedIncludePath])
-
-  //private val includePathTree
-
-
-
-//  lazy val includeSubQueryable = createSubQueryable(sampleYield.includeExpressions.get.joinedQueryable)
-//  private def subQueryableFor(includePath: IncludePathBase): SubQueryable[_] = {
-//    includeSubQueryable
-//  }
 
   def sampleYield: QueryYield[R]
   
@@ -296,24 +285,22 @@ abstract class AbstractQuery[R](
     private val structuredData: Seq[R] = {
 
       if(data.nonEmpty) {
-
         val columnCount = data.head.length
         val columns = (0 to columnCount - 1).map(index => {
           data.map(_(index))
         })
 
         val groupedColumns = columns.map(i =>
-            i.groupBy(g =>
+          i.groupBy(g =>
             (g.parent.map(_.id).getOrElse(None), g.entity.map(_.id).getOrElse(None))))
 
-        for(i <- 0 to columnCount - 1) {
+        for (i <- 0 to columnCount - 1) {
           val columnGroup = groupedColumns(i)
           val keysAndIterableRow = columnGroup.map(g => (g._1, g._2.head))
           keysAndIterableRow.map(keyAndIterableRow => {
             val parentGroup = groupedColumns.flatMap(
               _.flatMap(_._2.filter(_.entity == keyAndIterableRow._2.entity).headOption).headOption)
             val finalParent = parentGroup.flatMap(_.parent).headOption
-            //keyAndIterableRow._2.includePathRelation.get.relationshipAccessor[OneToMany[Any]](finalParent)
             (keyAndIterableRow, finalParent)
           })
             .filterNot(_._2.isEmpty)
@@ -331,61 +318,8 @@ abstract class AbstractQuery[R](
       } else {
         Seq()
       }
-      }
+    }
 
-
-
-//      def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeIterableRow]):
-//      Seq[IncludeIterableRow] = {
-//
-//        val value =
-//          if(parent.nonEmpty)
-//            left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-//          else
-//            Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
-//
-//        val newCollection =
-//          if(left.relations != null)
-//            left.relations.flatMap(walkAndRead(_, value, collection))
-//          else
-//            Seq()
-//
-//        newCollection ++ collection ++ Seq(IncludeIterableRow(value, parent, left.includePathRelation))
-//      }
-//    }
-//    {
-//
-////      def walkAndCollect(leftQueryable: SubQueryable[_], left: JoinedIncludePath, collected: Seq[(SubQueryable[_])]):
-////      Seq[(SubQueryable[_])] = {
-////
-////        val newCollection =
-////          if(left.relations != null)
-////            left.relations.flatMap(walkAndCollect(left.subQueryable, _, collected))
-////          else
-////            Seq()
-////
-////        if(left.joinedQueryable.nonEmpty) {
-////          qy.joinExpressions ++= Seq(left.joinCondition.get)
-////          left.subQueryable.node.joinExpression = Some(left.joinCondition.get())
-////          newCollection ++ collected ++ Seq(left.subQueryable)
-////        }
-////        else
-////          newCollection ++ collected
-////      }
-//
-//      data
-//        .groupBy(t => t._1.asInstanceOf[KeyedEntity[_]].id)
-//        .map(t => {
-//        val r = t._2.head._1
-//        t._2
-//          .flatMap(_._2)
-//          .groupBy(g => g._2)
-//          .foreach(otm => otm._2.foreach(
-//          _._2.relationshipAccessor[OneToMany[Any]](r)
-//            .fill(otm._2.flatMap(x => x._1.asInstanceOf[Option[_]]).toList)))
-//        r
-//      }).toList
-//    }
     private val iterator = structuredData.iterator
     def hasNext: Boolean = iterator.hasNext
 

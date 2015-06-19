@@ -15,21 +15,15 @@
  ***************************************************************************** */
 package org.squeryl.dsl.fsm
 
-import java.lang.reflect.Method
-
-import net.sf.cglib.proxy.{Enhancer, MethodProxy, MethodInterceptor, Callback}
-import org.squeryl.dsl.ast._
-import org.squeryl.dsl._
-import org.squeryl.dsl.boilerplate._
-import org.squeryl.dsl.internal.{JoinedQueryable, OuterJoinedQueryable}
-import org.squeryl.internals.{FieldReferenceLinker, ResultSetMapper, ColumnToTupleMapper, OutMapper}
 import java.sql.ResultSet
 
 import org.squeryl._
+import org.squeryl.dsl._
+import org.squeryl.dsl.ast._
+import org.squeryl.dsl.boilerplate._
+import org.squeryl.internals.{ColumnToTupleMapper, FieldReferenceLinker, OutMapper, ResultSetMapper}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-import scala.util.{Success, Try}
 
 class BaseQueryYield[G]
   (val queryElementzz: QueryElements[_], val selectClosure: ()=>G)
@@ -106,140 +100,9 @@ class BaseQueryYield[G]
           else b
       }
 
-  def include(inclusion: IncludePathCommon)(implicit s: Schema, gClass: ClassTag[G] /*,pClass: ClassTag[_]*/) = {
-//    val pTable = s.findAllTablesFor(pClass.runtimeClass).head.asInstanceOf[Table[_]]
-
-    /*val includeExpressions = this.includeExpressions ++ Seq(
-      (Seq((new OuterJoinedQueryable[Any](pTable.asInstanceOf[Queryable[Any]], "left"),
-        (r: Any, p: Any) => s.findRelationsFor(gClass.runtimeClass.asInstanceOf[Class[G]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(r.asInstanceOf[G], p.asInstanceOf[Option[Any]].get))),
-        inclusion.asInstanceOf[Any => IncludePath[Any]]))*/
-
+  def include(inclusion: IncludePathCommon)(implicit s: Schema, gClass: ClassTag[G]) = {
     new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(inclusion))
   }
-
-  private def sampleFor[A](a: Table[A])(implicit s: Schema): A = {
-    val v = a.asInstanceOf[View[A]]
-    val vxn = v.viewExpressionNode
-    vxn.sample =
-      v.posoMetaData.createSample(FieldReferenceLinker.createCallBack(vxn))
-
-    vxn.sample
-  }
-  
-//  private val enhancer = new Enhancer
-//    def includeDescendants[P](inclusion: (G) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[G], pClass: ClassTag[P]): IncludedPropertiesQueryYield[G] = {
-//      val gTable = s.findAllTablesFor(rClass.runtimeClass).head.asInstanceOf[Table[G]]
-//      val sample = sampleFor(gTable)
-//      inclusion(sample._1)
-//
-//      ???
-//    }
-
-//    var callBack: SampleLinkReader = null
-//    private def sampleForTable[A](implicit s: Schema, aClass: Class[_]): A = {
-//      val aTable = s.findAllTablesFor(aClass).head.asInstanceOf[Table[A]]
-//      val sample = sampleFor(aTable)
-//      sample._1
-//    }
-//
-//    private def sampleFor[A](a: Table[A])(implicit s: Schema): (A, Callback) = {
-//      val v = a.asInstanceOf[View[A]]
-//      val vxn = v.viewExpressionNode
-//      enhancer.setCallback(callBack)
-//      vxn.sample =
-//        v.posoMetaData.createSample(callBack)
-//
-//      (vxn.sample, callBack)
-//    }
-//
-//    class SampleLinkReader(implicit schema: Schema) extends MethodInterceptor {
-//      private val interceptedBuffer = new ArrayBuffer[Any]
-//
-//
-//      def intercepted: Iterable[Any] = {
-//        interceptedBuffer
-//      }
-//
-//      class OneToManyProxy[M](schema: Schema, mClass: Class[_]) extends OneToMany[M] {
-//        def iterator: Iterator[M] = List(sampleForTable[M](schema, mClass)).iterator
-//
-//        def assign(m: M): M = ???
-//
-//        def deleteAll: Int = ???
-//
-//        def associate(m: M): M = ???
-//
-//        private [squeryl] def fill(o: Iterable[M]): Unit = ???
-//
-//        def exceptAll(q: Query[M]): Query[M] = ???
-//
-//        def distinct: Query[M] = ???
-//
-//        def intersectAll(q: Query[M]): Query[M] = ???
-//
-//        def forUpdate: Query[M] = ???
-//
-//        def ast: O = ???
-//
-//        def statement: String = ???
-//
-//        private [squeryl] def copy(asRoot: Boolean, newUnions: List[(String, Query[M])]): Query[M] = ???
-//
-//        def intersect(q: Query[M]): Query[M] = ???
-//
-//        def unionAll(q: Query[M]): Query[M] = ???
-//
-//        protected[squeryl] def invokeYield(rsm: ResultSetMapper, resultSet: ResultSet): M = ???
-//
-//        def page(offset: Int, pageLength: Int): Query[M] = ???
-//
-//        def dumpAst: String = ???
-//
-//        def except(q: Query[M]): Query[M] = ???
-//
-//        def union(q: Query[M]): Query[M] = ???
-//
-//        private[squeryl] def give(resultSetMapper: ResultSetMapper, rs: ResultSet): M = ???
-//
-//        def name: String = ???
-//
-//        private[squeryl] def genericType: Class[M] = mClass.asInstanceOf[Class[M]]
-//      }
-//
-//      def intercept(o: scala.Any, method: Method, args: Array[AnyRef], methodProxy: MethodProxy): AnyRef = {
-//        interceptedBuffer.append(o, method)
-//
-//        val returnValue = methodProxy.invokeSuper(o, args)
-//
-//        if(returnValue != null && returnValue.getClass().getInterfaces().exists(c => c == classOf[OneToMany[_]])) {
-//
-//          def allInterfaces(i: Array[Class[_]]): Array[Class[_]] = {
-//            val nestedInterfaces = i.flatMap(_.getInterfaces())
-//            if(nestedInterfaces.nonEmpty)
-//              i ++ allInterfaces(nestedInterfaces)
-//            else
-//              i
-//          }
-//
-//          val interfaces = allInterfaces(returnValue.getClass().getInterfaces())
-//          enhancer.setSuperclass(classOf[OneToManyProxy[_]])
-//          val mClass = returnValue.asInstanceOf[OneToMany[_]].genericType
-//          val constructors = classOf[OneToManyProxy[_]].getConstructors()
-//          enhancer.create(Array(classOf[SampleLinkReader], classOf[Schema], classOf[Class[_]]), Array(this, schema, mClass))
-////          enhancer.setInterfaces(Array(classOf[OneToMany[_]], classOf[Iterable[_]]))
-//          val proxy = Try(enhancer.create())
-//
-//          proxy match {
-//            case Success(x) => {
-//              return x
-//            }
-//            case _ => {}
-//          }
-//        }
-//
-//        returnValue
-//      }
-//    }
 }
 
 class GroupQueryYield[K] (

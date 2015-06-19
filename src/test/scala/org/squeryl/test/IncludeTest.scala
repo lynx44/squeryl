@@ -1,6 +1,5 @@
 package org.squeryl.test
 
-import org.squeryl.dsl.fsm.Path
 import org.squeryl.dsl.fsm.Path._
 import org.squeryl.framework.{DBConnector, DbTestBase}
 import org.squeryl.test.PrimitiveTypeModeForTests._
@@ -224,7 +223,6 @@ class IncludeTest extends DbTestBase {
     val (p, data) = transaction {
       val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      //enclosing => adjacent => onetomany
       (p, from(IncludeSchema.managers)(p => select(p) include(p->>(_.->(_.employees)))).head)
     }
     val c = new Employee("child", p.id)
@@ -332,7 +330,7 @@ class IncludeTest extends DbTestBase {
       val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
       val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
       val r = IncludeSchema.categories.insert(new Category("category", b.id))
-      val ex = IncludeSchema.expenses.insert(new Expense("expenses", b.id))
+      val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
 
       from(IncludeSchema.managers)(p => select(p)
       include(p.->>(_.->(_.employees).->(_.benefits).->>(
@@ -341,9 +339,13 @@ class IncludeTest extends DbTestBase {
     }
 
     assert(data.employees.size == 1)
+    assert(data.employees.head.name == "employee")
     assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.head.benefits.head.name == "benefit")
     assert(data.employees.head.benefits.head.categories.size == 1)
+    assert(data.employees.head.benefits.head.categories.head.name == "category")
     assert(data.employees.head.benefits.head.expenses.size == 1)
+    assert(data.employees.head.benefits.head.expenses.head.name == "expense")
   }
 
   //end Nested Include tests
