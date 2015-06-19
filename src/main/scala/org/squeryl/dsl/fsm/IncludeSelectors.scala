@@ -103,6 +103,14 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
       new PathBuilder[A](head, allRelations ++ Seq(relation))
     }
 
+    def ->>(i: (PathBuilder[P] => PathBuilder[_])*)(implicit schema: Schema, mClass: ClassTag[P]): PathBuilder[_] = {
+
+      val allPaths = i.map(_(this))
+
+//      this._relations ++= allPaths.flatMap(_.relations).distinct
+      this
+    }
+
     def classType: ClassTag[_] = head.classType
 
     override def relations: Seq[IncludePathRelation] = head.relations

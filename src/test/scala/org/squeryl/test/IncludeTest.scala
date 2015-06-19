@@ -33,9 +33,14 @@ class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] 
   val id: Long = 0
 
   lazy val categories = IncludeSchema.benefit_category_relation.left(this)
+  lazy val expenses = IncludeSchema.benefit_expense_relation.left(this)
 }
 
 class Category(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
+  val id: Long = 0
+}
+
+class Expense(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 }
 
@@ -46,12 +51,14 @@ object IncludeSchema extends Schema {
   val responsibilityTypes = table[ResponsibilityType]
   val benefits = table[Benefit]
   val categories = table[Category]
+  val expenses = table[Expense]
 
   val manager_employee_relation = oneToManyRelation(managers, employees).via((m, e) => m.id === e.managerId)
   val manager_responsibility_relation = oneToManyRelation(managers, responsibilities).via((m, r) => m.id === r.managerId)
   val responsibility_responsibilityType_relation = oneToManyRelation(responsibilities, responsibilityTypes).via((r, t) => r.id === t.responsibilityId)
   val employee_benefit_relation = oneToManyRelation(employees, benefits).via((e, b) => e.id === b.employeeId)
   val benefit_category_relation = oneToManyRelation(benefits, categories).via((b, c) => b.id === c.benefitId)
+  val benefit_expense_relation = oneToManyRelation(benefits, expenses).via((b, e) => b.id === e.benefitId)
 
   def reset() = {
     drop // its protected for some reason
@@ -312,6 +319,31 @@ class IncludeTest extends DbTestBase {
     assert(data.employees.head.benefits.size == 1)
     assert(data.responsibilities.size == 1)
     assert(data.responsibilities.head.types.size == 1)
+  }
+
+  test("include oneToMany - can retrieve nested properties with adjacent properties") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
+      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+      val r = IncludeSchema.categories.insert(new Category("category", b.id))
+      val ex = IncludeSchema.expenses.insert(new Expense("expenses", b.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(p.->>(_.->(_.employees).->(_.benefits).->>(
+                                                          _.->(_.categories), _.->(_.expenses)),
+                    _.->(_.responsibilities).->(_.types)))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.head.benefits.head.categories.size == 1)
+    assert(data.employees.head.benefits.head.expenses.size == 1)
   }
 
   //end Nested Include tests
