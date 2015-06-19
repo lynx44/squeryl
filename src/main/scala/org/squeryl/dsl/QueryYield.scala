@@ -19,7 +19,7 @@ import java.sql.ResultSet
 
 import org.squeryl.dsl.ast._
 import org.squeryl.dsl.boilerplate._
-import org.squeryl.dsl.fsm.{IncludePathCommon, IncludedPropertiesQueryYield}
+import org.squeryl.dsl.fsm.{IncludePathCommon, IncludedPropertiesQueryYield, PathBuilder}
 import org.squeryl.internals.ResultSetMapper
 import org.squeryl.{Query, Schema}
 
@@ -41,12 +41,9 @@ trait QueryYield[R] {
 
   private [squeryl] var joinExpressions: Seq[()=>LogicalBoolean] = Nil
 
-  //Seq[(Seq[(JoinedQueryable[_], (Any, Any) => EqualityExpression)], (Any) => IncludePath[Any])] = Seq()
   protected [squeryl] def includeExpressions: Option[IncludePathCommon] = None
 
-//  def include[P](inclusion: R => OneToMany[P])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
-//  def includeDescendants[P](inclusion: (R) => Iterable[OneToMany[P]])(implicit s: Schema, rClass: ClassTag[R], pClass: ClassTag[P]) : IncludedPropertiesQueryYield[R]
-  def include(i: IncludePathCommon)(implicit s: Schema, rClass: ClassTag[R]/*, pClass: ClassTag[_]*/) : IncludedPropertiesQueryYield[R]
+  def include(includeExpression: PathBuilder[R] => PathBuilder[_])(implicit s: Schema, rClass: ClassTag[R]) : IncludedPropertiesQueryYield[R]
 
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)

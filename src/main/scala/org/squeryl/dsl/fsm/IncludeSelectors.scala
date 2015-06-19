@@ -34,22 +34,6 @@ trait IncludePathCommon {
   }
 }
 
-object Path {
-  implicit class ObjectToPath[M](r: M)
-  {
-    def ->>(i: (PathBuilder[M] => PathBuilder[_])*)(implicit schema: Schema, mClass: ClassTag[M]): IncludePathCommon = {
-      val pb = new PathBuilder[M](new IncludePathNode[M](), Seq())
-      val allPaths = i.map(_(pb))
-      val node = new IncludePathNode[M]()
-
-      node._relations = allPaths.flatMap(_.relations).distinct
-      node
-    }
-  }
-
-  implicit def OneToManyAccessorToIncludePath[P, M](i: P => OneToMany[M]): IncludePathRelation = ???
-}
-
 class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelation])
   extends IncludePathCommon {
 

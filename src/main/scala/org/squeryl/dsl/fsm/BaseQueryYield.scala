@@ -100,8 +100,14 @@ class BaseQueryYield[G]
           else b
       }
 
-  def include(inclusion: IncludePathCommon)(implicit s: Schema, gClass: ClassTag[G]) = {
-    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(inclusion))
+  def include(includeExpression: PathBuilder[G] => PathBuilder[_])(implicit s: Schema, gClass: ClassTag[G]) = {
+    val pb = new PathBuilder[G](new IncludePathNode[G](), Seq())
+    val allPaths = includeExpression(pb)
+    val node = new IncludePathNode[G]()
+
+    node._relations ++= allPaths.relations
+
+    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(node))
   }
 }
 
