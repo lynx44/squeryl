@@ -376,23 +376,57 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val m = IncludeSchema.managers.insert(new Manager("manager"))
-      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
-      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
-      val c = IncludeSchema.categories.insert(new Category("category", b.id))
-      val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
-      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
-      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id))
+      val m2 = IncludeSchema.managers.insert(new Manager("badManager"))
+      val r2 = IncludeSchema.responsibilities.insert(new Responsibility("badResponsibility", m2.id))
+      val rt2 = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("badResponsibilityType", r2.id))
 
-      from(IncludeSchema.employees)(p => select(p) include(_->>(_.*-(_.manager), _.-*(_.benefits).-*(_.expenses)))).head
+      val m1 = IncludeSchema.managers.insert(new Manager("manager1"))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility1", m1.id))
+      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType1", r.id))
+
+      val e1 = IncludeSchema.employees.insert(new Employee("employee1", m1.id))
+      val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
+      val ex = IncludeSchema.expenses.insert(new Expense("expense1", b1.id))
+
+      val e2 = IncludeSchema.employees.insert(new Employee("employee2", m1.id))
+      val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
+      val c2 = IncludeSchema.categories.insert(new Category("category2", b2.id))
+
+
+      from(IncludeSchema.employees)(p => select(p) include(_->>(
+        _.*-(_.manager).-*(_.responsibilities),
+        _.-*(_.benefits).->>(
+                              _.-*(_.expenses), _.-*(_.categories))))).head
     }
 
-    assert(data.manager.size == 1)
-    assert(data.manager.head.name == "manager")
     assert(data.benefits.size == 1)
-    assert(data.benefits.head.name == "benefit")
+    assert(data.benefits.head.name == "benefit1")
     assert(data.benefits.head.expenses.size == 1)
-    assert(data.benefits.head.expenses.head.name == "expense")
+    assert(data.benefits.head.expenses.head.name == "expense1")
+    assert(data.benefits.head.categories.size == 0)
+
+    assert(data.manager.size == 1)
+    assert(data.manager.head.name == "manager1")
+    assert(data.manager.size == 1)
+    assert(data.manager.head.responsibilities.size == 1)
+    assert(data.manager.head.responsibilities.head.name == "responsibility1")
+    assert(data.manager.head.responsibilities.head.types.size == 1)
+    assert(data.manager.head.responsibilities.head.types.name == "responsibilityType1")
+  }
+
+  test("include oneToMany - with no data returns empty size") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m1 = IncludeSchema.managers.insert(new Manager("manager1"))
+
+      from(IncludeSchema.managers)(p => select(p) include(_-*(_.employees))).head
+    }
+
+    assert(data.employees.size == 0)
   }
 
   // end many to one tests

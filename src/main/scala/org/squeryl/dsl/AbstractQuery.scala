@@ -70,7 +70,7 @@ abstract class AbstractQuery[R](
     val joinedQueryable: JoinedQueryable[_] =
       includeRelation match {
         case m: OneToManyIncludePathRelation[_, _] => new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
-        case m: ManyToOneIncludePathRelation[_, _] => new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "right")
+        case m: ManyToOneIncludePathRelation[_, _] => new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
       }
     val rightSubQueryable = createOrFindSubqueryable(joinedQueryable)
     val squerylRelation = includeRelation.equalityExpressionAccessor(leftSubqueryable.sample, rightSubQueryable.sample)
@@ -280,8 +280,14 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[Seq[IncludeIterableRow]]) extends Iterator[R] {
+  private class IncludeIterable[R](data: Seq[Seq[IncludeRowData]], columnDef: Seq[JoinedIncludePath]) extends Iterator[R] {
     private val structuredData: Seq[R] = {
+
+      class DataColumn(data: Seq[IncludeRowData]) extends Iterable[IncludeRowData] {
+        def iterator: Iterator[IncludeRowData] = data.iterator
+      }
+
+      case class GroupedData(keyValue: Option[Any], parentKeyValue: Option[Any], relation: Option[IncludePathRelation])
 
       if(data.nonEmpty) {
         val columnCount = data.head.length
@@ -291,37 +297,50 @@ abstract class AbstractQuery[R](
 
         val groupedColumns = columns.map(i =>
           i.groupBy(g =>
-            (g.parent.map(_.id).getOrElse(None), g.entity.map(_.id).getOrElse(None))))
+            GroupedData(g.entity.map(_.id), g.parent.map(_.id), g.includePathRelation)))
+
+        // gets the correct instance - the instance we're using for the specified key
+        def findCanonicalRowData(d: Option[KeyedEntity[_]]): Option[KeyedEntity[_]] = {
+
+          def findGroupColumn: Option[Map[GroupedData, Iterable[IncludeRowData]]] = {
+            groupedColumns.filter(_.filter(_._2.filter(_.entity == d).nonEmpty).nonEmpty).headOption
+          }
+
+          if(d.nonEmpty) {
+            val groupColumn = findGroupColumn
+            if(groupColumn.nonEmpty)
+              return groupColumn.get.filter(_._2.filter(_.entity.get.id == d.get.id).nonEmpty).head._2.head.entity
+          }
+
+          None
+        }
 
         for (i <- 0 to columnCount - 1) {
           val columnGroup = groupedColumns(i)
           val keysAndIterableRow = columnGroup.map(g => (g._1, g._2.head))
           keysAndIterableRow.map(keyAndIterableRow => {
-            val parentGroup = groupedColumns.flatMap(
-              _.flatMap(_._2.filter(_.entity == keyAndIterableRow._2.entity).headOption).headOption)
-            val finalParent = parentGroup.flatMap(_.parent).headOption
+            val finalParent = findCanonicalRowData(keyAndIterableRow._2.parent)
             (keyAndIterableRow, finalParent)
           })
-            .filterNot(_._2.isEmpty)
             .groupBy(_._2)
             .foreach(parentGroup => {
             val entities = parentGroup._2.map(_._1._2.entity)
-            val iterableRow = parentGroup._2.head._1._2
             val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get).toList
 
-            val includeRelation = iterableRow.includePathRelation.get
-            includeRelation match {
-              case x: OneToManyIncludePathRelation[_, _] => {
-                val relationship = includeRelation.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
-                relationship.fill(fillEntities)
-              }
-              case y: ManyToOneIncludePathRelation[_, _] => {
-                val relationship = includeRelation.relationshipAccessor[ManyToOne[Any]](parentGroup._1.get)
-                if(fillEntities.nonEmpty)
-                  relationship.fill(fillEntities.head)
+            val includeRelationOption = columnDef(i).includePathRelation //parentGroup._2.head._1._2._2.includePathRelation.get
+            if(includeRelationOption.nonEmpty) {
+            val includeRelation = includeRelationOption.get
+              includeRelation match {
+                case x: OneToManyIncludePathRelation[_, _] => {
+                  val relationship = includeRelation.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
+                  relationship.fill(fillEntities)
+                }
+                case y: ManyToOneIncludePathRelation[_, _] => {
+                  val relationship = includeRelation.relationshipAccessor[ManyToOne[Any]](parentGroup._1.get)
+                  relationship.fill(fillEntities)
+                }
               }
             }
-
           })
         }
 
@@ -337,7 +356,7 @@ abstract class AbstractQuery[R](
     def next(): R = iterator.next
   }
 
-  private case class IncludeIterableRow(entity: Option[KeyedEntity[_]], parent: Option[KeyedEntity[_]], includePathRelation: Option[IncludePathRelation])
+  private case class IncludeRowData(entity: Option[KeyedEntity[_]], parent: Option[KeyedEntity[_]], includePathRelation: Option[IncludePathRelation])
 
   def iterator = new Iterator[R] with Closeable {
 
@@ -363,9 +382,21 @@ abstract class AbstractQuery[R](
     val includeIterable =
       if(sampleYield.includePath.nonEmpty)
       {
+        def walkAndGetColumnLayout(left: JoinedIncludePath, collection: Seq[JoinedIncludePath]):
+          Seq[JoinedIncludePath] = {
+
+            val newCollection =
+              if(left.relations != null)
+                left.relations.flatMap(walkAndGetColumnLayout(_, collection))
+              else
+                Seq()
+
+            newCollection ++ collection ++ Seq(left)
+          }
+
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
-          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeIterableRow]):
-            Seq[IncludeIterableRow] = {
+          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeRowData]):
+            Seq[IncludeRowData] = {
 
               val value =
                 if(parent.nonEmpty)
@@ -379,14 +410,14 @@ abstract class AbstractQuery[R](
                 else
                   Seq()
 
-              newCollection ++ collection ++ Seq(IncludeIterableRow(value, parent, left.includePathRelation))
+              newCollection ++ collection ++ Seq(IncludeRowData(value, parent, left.includePathRelation))
             }
 
             val row = walkAndRead(joinedIncludes.get, None, Seq())
             row
           }
         ).toList
-        Some(new IncludeIterable[R](valueMap))
+        Some(new IncludeIterable[R](valueMap, walkAndGetColumnLayout(joinedIncludes.get, Seq())))
       } else {
         None
       }

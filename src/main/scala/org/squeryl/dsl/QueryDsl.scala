@@ -717,7 +717,7 @@ trait QueryDsl
         def delete =
           leftTable.deleteWhere(o => f(o, rightSide)) > 0
 
-        private [squeryl] def fill(o: O) = this.subCollection = Option(Iterable(o))
+        private [squeryl] def fill(o: Iterable[O]) = this.subCollection = Option(o)
       }
     }
 
