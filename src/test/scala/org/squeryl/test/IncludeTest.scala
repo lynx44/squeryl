@@ -369,6 +369,32 @@ class IncludeTest extends DbTestBase {
     assert(data.manager.head.name == "manager")
   }
 
+  test("include all different relations") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("manager"))
+      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
+      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+      val c = IncludeSchema.categories.insert(new Category("category", b.id))
+      val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
+      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id))
+
+      from(IncludeSchema.employees)(p => select(p) include(_->>(_.*-(_.manager), _.-*(_.benefits).-*(_.expenses)))).head
+    }
+
+    assert(data.manager.size == 1)
+    assert(data.manager.head.name == "manager")
+    assert(data.benefits.size == 1)
+    assert(data.benefits.head.name == "benefit")
+    assert(data.benefits.head.expenses.size == 1)
+    assert(data.benefits.head.expenses.head.name == "expense")
+  }
+
   // end many to one tests
 }
 
