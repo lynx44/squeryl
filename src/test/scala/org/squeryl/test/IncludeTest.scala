@@ -279,10 +279,10 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      val m = IncludeSchema.managers.insert(new Manager("person"))
-      val e1 = IncludeSchema.employees.insert(new Employee("child1", m.id))
+      val m = IncludeSchema.managers.insert(new Manager("manager"))
+      val e1 = IncludeSchema.employees.insert(new Employee("employee1", m.id))
       val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
-      val e2 = IncludeSchema.employees.insert(new Employee("child2", m.id))
+      val e2 = IncludeSchema.employees.insert(new Employee("employee2", m.id))
       val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
 
       from(IncludeSchema.managers)(p => select(p)
@@ -291,9 +291,9 @@ class IncludeTest extends DbTestBase {
 
     assert(data.employees.size == 2)
     assert(data.employees.head.benefits.size == 1)
-    assert(data.employees.head.benefits.head.name == "benefit1")
+    assert(data.employees.filter(_.name == "employee1").head.benefits.head.name == "benefit1")
     assert(data.employees.last.benefits.size == 1)
-    assert(data.employees.last.benefits.head.name == "benefit2")
+    assert(data.employees.filter(_.name == "employee2").head.benefits.head.name == "benefit2")
   }
 
   test("include oneToMany - can retrieve nested properties on adjacent properties with correct assignments") {
@@ -394,9 +394,9 @@ class IncludeTest extends DbTestBase {
 
 
       from(IncludeSchema.employees)(p => select(p) include(_->>(
-        _.*-(_.manager).-*(_.responsibilities),
+        _.*-(_.manager).-*(_.responsibilities).-*(_.types),
         _.-*(_.benefits).->>(
-                              _.-*(_.expenses), _.-*(_.categories))))).head
+                              _.-*(_.expenses), _.-*(_.categories))))).toList.filter(_.name == "employee1").head
     }
 
     assert(data.benefits.size == 1)
@@ -407,11 +407,10 @@ class IncludeTest extends DbTestBase {
 
     assert(data.manager.size == 1)
     assert(data.manager.head.name == "manager1")
-    assert(data.manager.size == 1)
     assert(data.manager.head.responsibilities.size == 1)
     assert(data.manager.head.responsibilities.head.name == "responsibility1")
     assert(data.manager.head.responsibilities.head.types.size == 1)
-    assert(data.manager.head.responsibilities.head.types.name == "responsibilityType1")
+    assert(data.manager.head.responsibilities.head.types.head.name == "responsibilityType1")
   }
 
   test("include oneToMany - with no data returns empty size") {

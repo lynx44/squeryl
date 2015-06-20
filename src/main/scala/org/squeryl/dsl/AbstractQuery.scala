@@ -309,7 +309,7 @@ abstract class AbstractQuery[R](
           if(d.nonEmpty) {
             val groupColumn = findGroupColumn
             if(groupColumn.nonEmpty)
-              return groupColumn.get.filter(_._2.filter(_.entity.get.id == d.get.id).nonEmpty).head._2.head.entity
+              return groupColumn.get.filter(_._2.filter(_.entity.map(_.id == d.get.id).getOrElse(false)).nonEmpty).head._2.head.entity
           }
 
           None
@@ -324,7 +324,7 @@ abstract class AbstractQuery[R](
           })
             .groupBy(_._2)
             .foreach(parentGroup => {
-            val entities = parentGroup._2.map(_._1._2.entity)
+            val entities = parentGroup._2.map(x => findCanonicalRowData(x._1._2.entity))
             val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get).toList
 
             val includeRelationOption = columnDef(i).includePathRelation //parentGroup._2.head._1._2._2.includePathRelation.get
