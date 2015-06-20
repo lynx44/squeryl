@@ -4,7 +4,7 @@ import org.squeryl.framework.{DBConnector, DbTestBase}
 import org.squeryl.test.PrimitiveTypeModeForTests._
 import org.squeryl.{KeyedEntity, Schema}
 
-class Manager(val lastName: String) extends KeyedEntity[Long] {
+class Manager(val name: String) extends KeyedEntity[Long] {
   val id: Long = 0
 
   lazy val employees = IncludeSchema.manager_employee_relation.left(this)
@@ -15,6 +15,7 @@ class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] 
   val id: Long = 0
 
   lazy val benefits = IncludeSchema.employee_benefit_relation.left(this)
+  lazy val manager = IncludeSchema.manager_employee_relation.right(this)
 }
 
 class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
@@ -89,7 +90,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
     }
 
     assert(data.employees.size == 1)
@@ -106,7 +107,7 @@ class IncludeTest extends DbTestBase {
       val c1 = IncludeSchema.employees.insert(new Employee("child1", p.id))
       val c2 = IncludeSchema.employees.insert(new Employee("child2", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
     }
 
     assert(data.employees.size == 2)
@@ -124,12 +125,12 @@ class IncludeTest extends DbTestBase {
       val c1 = IncludeSchema.employees.insert(new Employee("child1", p1.id))
       val c2 = IncludeSchema.employees.insert(new Employee("child2", p2.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).toList
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
     }
 
     assert(data.size == 2)
-    assert(data.filter(p => p.lastName == "person1").head.employees.head.name == "child1")
-    assert(data.filter(p => p.lastName == "person2").head.employees.head.name == "child2")
+    assert(data.filter(p => p.name == "person1").head.employees.head.name == "child1")
+    assert(data.filter(p => p.name == "person2").head.employees.head.name == "child2")
   }
 
   test("include oneToMany - many relation with no data returns empty") {
@@ -139,7 +140,7 @@ class IncludeTest extends DbTestBase {
     }
 
     val data = transaction {
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).toList
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
     }
 
     assert(data.size == 0)
@@ -155,7 +156,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
     }
 
     assert(data.employees.size == 1)
@@ -171,7 +172,7 @@ class IncludeTest extends DbTestBase {
     val data = transaction {
       val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
     }
 
     assert(data.employees.size == 0)
@@ -187,7 +188,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-      val data = from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
 
       data.employees.deleteAll
 
@@ -205,7 +206,7 @@ class IncludeTest extends DbTestBase {
       val p = IncludeSchema.managers.insert(new Manager("person"))
       val c = new Employee("child", p.id)
 
-      val data = from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head
+      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
 
       data.employees.associate(c)
 
@@ -222,7 +223,7 @@ class IncludeTest extends DbTestBase {
     val (p, data) = transaction {
       val p = IncludeSchema.managers.insert(new Manager("person"))
 
-      (p, from(IncludeSchema.managers)(p => select(p) include(_.->(_.employees))).head)
+      (p, from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head)
     }
     val c = new Employee("child", p.id)
 
@@ -245,7 +246,7 @@ class IncludeTest extends DbTestBase {
       val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
 
       from(IncludeSchema.managers)(p => select(p)
-      include(_.->>(_.->(_.employees), _.->(_.responsibilities)))).head
+      include(_.->>(_.-*(_.employees), _.-*(_.responsibilities)))).head
     }
 
     assert(data.employees.size == 1)
@@ -264,7 +265,7 @@ class IncludeTest extends DbTestBase {
       val r = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
 
       from(IncludeSchema.managers)(p => select(p)
-      include(_.->(_.employees).->(_.benefits))).head
+      include(_.-*(_.employees).-*(_.benefits))).head
     }
 
     assert(data.employees.size == 1)
@@ -285,7 +286,7 @@ class IncludeTest extends DbTestBase {
       val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
 
       from(IncludeSchema.managers)(p => select(p)
-      include(_.->(_.employees).->(_.benefits))).head
+      include(_.-*(_.employees).-*(_.benefits))).head
     }
 
     assert(data.employees.size == 2)
@@ -309,7 +310,7 @@ class IncludeTest extends DbTestBase {
       val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id))
 
       from(IncludeSchema.managers)(p => select(p)
-      include(_.->>(_.->(_.employees).->(_.benefits), _.->(_.responsibilities).->(_.types)))).head
+      include(_.->>(_.-*(_.employees).-*(_.benefits), _.-*(_.responsibilities).-*(_.types)))).head
     }
 
     assert(data.employees.size == 1)
@@ -332,9 +333,9 @@ class IncludeTest extends DbTestBase {
       val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
 
       from(IncludeSchema.managers)(p => select(p)
-      include(_.->>(_.->(_.employees).->(_.benefits).->>(
-                                                          _.->(_.categories), _.->(_.expenses)),
-                    _.->(_.responsibilities).->(_.types)))).head
+      include(_.->>(_.-*(_.employees).-*(_.benefits).->>(
+                                                          _.-*(_.categories), _.-*(_.expenses)),
+                    _.-*(_.responsibilities).-*(_.types)))).head
     }
 
     assert(data.employees.size == 1)
@@ -347,6 +348,27 @@ class IncludeTest extends DbTestBase {
     assert(data.employees.head.benefits.head.expenses.head.name == "expense")
   }
 
-  //end Nested Include tests
+  // end Nested Include tests
+
+  // many to one tests
+
+  test("include manyToOne - one relation") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("manager"))
+      val c = IncludeSchema.employees.insert(new Employee("employee", p.id))
+
+      from(IncludeSchema.employees)(p => select(p) include(_.*-(_.manager))).head
+    }
+
+    assert(data.manager.size == 1)
+    assert(data.manager.head.name == "manager")
+  }
+
+  // end many to one tests
 }
 

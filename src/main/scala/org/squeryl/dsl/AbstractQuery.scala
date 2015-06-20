@@ -69,12 +69,11 @@ abstract class AbstractQuery[R](
     val rightTable = right.table
     val joinedQueryable: JoinedQueryable[_] =
       includeRelation match {
-        case m: OneToManyIncludePathRelation[_, _] => {
-          new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
-        }
+        case m: OneToManyIncludePathRelation[_, _] => new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "left")
+        case m: ManyToOneIncludePathRelation[_, _] => new OuterJoinedQueryable[Any](rightTable.asInstanceOf[Queryable[Any]], "right")
       }
     val rightSubQueryable = createOrFindSubqueryable(joinedQueryable)
-    val squerylRelation = right.schema.findRelationsFor(leftClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(if(leftSubqueryable.sample.isInstanceOf[Option[Any]]) leftSubqueryable.sample.asInstanceOf[Option[Any]].get else leftSubqueryable.sample, rightSubQueryable.sample.asInstanceOf[Option[Any]].get)
+    val squerylRelation = includeRelation.equalityExpressionAccessor(leftSubqueryable.sample, rightSubQueryable.sample)
 
     val joinLogicalBoolean: () => LogicalBoolean = () => squerylRelation
 
@@ -309,8 +308,20 @@ abstract class AbstractQuery[R](
             val entities = parentGroup._2.map(_._1._2.entity)
             val iterableRow = parentGroup._2.head._1._2
             val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get).toList
-            val relationship = iterableRow.includePathRelation.get.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
-            relationship.fill(fillEntities)
+
+            val includeRelation = iterableRow.includePathRelation.get
+            includeRelation match {
+              case x: OneToManyIncludePathRelation[_, _] => {
+                val relationship = includeRelation.relationshipAccessor[OneToMany[Any]](parentGroup._1.get)
+                relationship.fill(fillEntities)
+              }
+              case y: ManyToOneIncludePathRelation[_, _] => {
+                val relationship = includeRelation.relationshipAccessor[ManyToOne[Any]](parentGroup._1.get)
+                if(fillEntities.nonEmpty)
+                  relationship.fill(fillEntities.head)
+              }
+            }
+
           })
         }
 

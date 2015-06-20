@@ -219,8 +219,8 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
 //  }
 
   test("select expected relation") {
-    assertEquals(1, SchoolDb2.findRelationsFor(classOf[Subject], classOf[Course]).toSeq.length, "Did not find exactly one relation")
-    assertEquals(SchoolDb2.subjectToCourses, SchoolDb2.findRelationsFor(classOf[Subject], classOf[Course]).head, "Relation should be subjectToCourses")
+    assertEquals(1, SchoolDb2.findOneToManyRelationsFor(classOf[Subject], classOf[Course]).toSeq.length, "Did not find exactly one relation")
+    assertEquals(SchoolDb2.subjectToCourses, SchoolDb2.findOneToManyRelationsFor(classOf[Subject], classOf[Course]).head, "Relation should be subjectToCourses")
   }
 
   test("select using query value") {

@@ -85,7 +85,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
   def findAllTablesFor[A](c: Class[A]) =
     _tables.filter(t => c.isAssignableFrom(t.posoMetaData.clasz)).asInstanceOf[Traversable[Table[_]]]
 
-  def findRelationsFor[O, M](o: Class[O], m: Class[M]): Iterable[OneToManyRelation[O, M]] = {
+  def findOneToManyRelationsFor[O, M](o: Class[O], m: Class[M]): Iterable[OneToManyRelation[O, M]] = {
     _oneToManyRelations.filter(p => o.isAssignableFrom(p.oneType) && m.isAssignableFrom(p.manyType)).map(_.asInstanceOf[OneToManyRelation[O, M]])
   }
 

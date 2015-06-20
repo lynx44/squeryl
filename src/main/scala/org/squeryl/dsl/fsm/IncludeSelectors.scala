@@ -1,7 +1,7 @@
 package org.squeryl.dsl.fsm
 
 import org.squeryl._
-import org.squeryl.dsl.OneToMany
+import org.squeryl.dsl.{ManyToOne, OneToMany}
 import org.squeryl.dsl.ast.EqualityExpression
 import org.squeryl.dsl.internal.{OuterJoinedQueryable, JoinedQueryable}
 import org.squeryl.internals.FieldReferenceLinker
@@ -11,6 +11,14 @@ import scala.reflect.ClassTag
 trait IncludePathRelation {
   def relationshipAccessor[T](o: Any): T
   def right: IncludePathCommon
+  def equalityExpressionAccessor(m: Any, o: Any): EqualityExpression
+
+  protected def getUnderlyingValue(o: Any): Any = {
+    if(o.isInstanceOf[Option[Any]])
+      getUnderlyingValue(o.asInstanceOf[Option[Any]].get)
+    else
+      o
+  }
 }
 
 trait IncludePathCommon {
@@ -39,9 +47,18 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
 
     private val lastPath = allRelations.lastOption.map(_.right).getOrElse(head)
 
-    def ->[A](i: (P) => OneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
+    def -*[A](i: (P) => OneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
       val rightNode = new IncludePathNode[A]()
       val relation = new OneToManyIncludePathRelation[P, A](i, rightNode)
+
+      lastPath._relations ++= Seq(relation)
+
+      new PathBuilder[A](head, allRelations ++ Seq(relation))
+    }
+  
+    def *-[A](i: (P) => ManyToOne[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
+      val rightNode = new IncludePathNode[A]()
+      val relation = new ManyToOneIncludePathRelation[P, A](i, rightNode)
 
       lastPath._relations ++= Seq(relation)
 
@@ -62,18 +79,33 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
     def schema: Schema = head.schema
 }
 
-class OneToManyIncludePathRelation[M, P](accessor: M => OneToMany[P], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], pClass: ClassTag[P])
+class OneToManyIncludePathRelation[O, M](accessor: O => OneToMany[M], override val right: IncludePathCommon)(implicit schema: Schema, oClass: ClassTag[O], mClass: ClassTag[M])
   extends IncludePathRelation {
-  val table = schema.findAllTablesFor(pClass.runtimeClass).head
+  val table = schema.findAllTablesFor(oClass.runtimeClass).head
   
-  def relationshipAccessor[T](o: Any): T = accessor(o.asInstanceOf[M]).asInstanceOf[T]
+  def relationshipAccessor[T](o: Any): T = accessor(o.asInstanceOf[O]).asInstanceOf[T]
 
   def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression =
-    schema.findRelationsFor(mClass.runtimeClass.asInstanceOf[Class[M]], pClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(o.asInstanceOf[M], m.asInstanceOf[Option[Any]].get)
+//  val squerylRelation = right.schema.findRelationsFor(leftClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(if(leftSubqueryable.sample.isInstanceOf[Option[Any]]) leftSubqueryable.sample.asInstanceOf[Option[Any]].get else leftSubqueryable.sample, rightSubQueryable.sample.asInstanceOf[Option[Any]].get)
+    schema.findOneToManyRelationsFor(oClass.runtimeClass.asInstanceOf[Class[O]], mClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(getUnderlyingValue(o).asInstanceOf[O], getUnderlyingValue(m))
 
   val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](table.asInstanceOf[Queryable[Any]], "left")
 
-  def classType: ClassTag[_] = pClass
+  def classType: ClassTag[_] = oClass
+}
+
+class ManyToOneIncludePathRelation[M, O](accessor: M => ManyToOne[O], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], oClass: ClassTag[O])
+  extends IncludePathRelation {
+  val table = schema.findAllTablesFor(oClass.runtimeClass).head
+  
+  def relationshipAccessor[T](m: Any): T = accessor(m.asInstanceOf[M]).asInstanceOf[T]
+
+  def equalityExpressionAccessor(m: Any, o: Any): EqualityExpression =
+    schema.findOneToManyRelationsFor(oClass.runtimeClass.asInstanceOf[Class[O]], mClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(getUnderlyingValue(o).asInstanceOf[O], getUnderlyingValue(m))
+
+  val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](table.asInstanceOf[Queryable[Any]], "left")
+
+  def classType: ClassTag[_] = oClass
 }
 
 class IncludePathNode[M]()(implicit override val schema: Schema, mClass: ClassTag[M])

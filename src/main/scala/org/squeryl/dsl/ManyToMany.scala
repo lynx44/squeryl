@@ -276,4 +276,6 @@ trait ManyToOne[O] extends Query[O] {
   def assign(one: O): O
 
   def delete: Boolean
+
+  private [squeryl] def fill(o: O)
 }
