@@ -107,7 +107,7 @@ class BaseQueryYield[G]
 
     node._relations ++= allPaths.relations
 
-    new IncludedPropertiesQueryYield[G](this.queryElementzz, this.selectClosure, Some(node))
+    new IncludedPropertiesQueryYield[G](this, Some(node))
   }
 }
 
@@ -227,8 +227,15 @@ extends BaseQueryYield[GroupWithMeasures[K,M]](_qe, null)
 }
 
 class IncludedPropertiesQueryYield[R](
-                                       val qe: QueryElements[_],
-                                       val sc: ()=>R,
+                                       val baseQueryYield: BaseQueryYield[R],
                                        override val includePath: Option[IncludePathCommon])
-  extends BaseQueryYield[R](qe, sc) {
+  extends QueryYield[R] {
+
+  def invokeYield(resultSetMapper: ResultSetMapper, rs: ResultSet): R = baseQueryYield.invokeYield(resultSetMapper, rs)
+
+  def queryElements: (Option[ExpressionNode], Option[ExpressionNode], Iterable[ExpressionNode], Iterable[ExpressionNode], Iterable[Query[_]]) =
+    baseQueryYield.queryElements
+
+  def invokeYieldForAst(q: QueryExpressionNode[_], rsm: ResultSetMapper): (Iterable[SelectElement], AnyRef) =
+    baseQueryYield.invokeYieldForAst(q, rsm)
 }

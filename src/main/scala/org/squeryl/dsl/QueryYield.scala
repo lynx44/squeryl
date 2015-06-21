@@ -43,8 +43,6 @@ trait QueryYield[R] {
 
   protected [squeryl] def includePath: Option[IncludePathCommon] = None
 
-  def include(includeExpression: PathBuilder[R] => PathBuilder[_])(implicit s: Schema, rClass: ClassTag[R]) : IncludedPropertiesQueryYield[R]
-
   def on(lb1: =>LogicalBoolean) = {
     joinExpressions = Seq(lb1 _)
     new JoinQueryYield1(this)

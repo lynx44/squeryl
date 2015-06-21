@@ -46,6 +46,8 @@ trait QueryElements[Cond]
 
 trait SelectState[R] extends QueryYield[R] with OrderBySignatures[R] {
   self: BaseQueryYield[R] =>
+
+  def include(includeExpression: PathBuilder[R] => PathBuilder[_])(implicit s: Schema, rClass: ClassTag[R]) : IncludedPropertiesQueryYield[R]
 }
 
 trait ComputeStateStartOrWhereState[M]
