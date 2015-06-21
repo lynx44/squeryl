@@ -57,7 +57,7 @@ abstract class AbstractQuery[R](
   private def includePathToJoinExpressionAdjacentRecursive(left: IncludePathCommon): JoinedIncludePath = {
     val (leftTable, leftSubQueryable) = (left.table, createOrFindSubqueryable(left.table))
     val adjacentMembers =
-      left.relations.map(includeRelation => {
+      left.relations.filterNot(x => x.inhibited).map(includeRelation => {
         includeRelationToJoinIncludeRecursive(leftSubQueryable, left.classType.runtimeClass, includeRelation)
       })
 
@@ -79,7 +79,7 @@ abstract class AbstractQuery[R](
 
     val relations =
       if(right.relations != null)
-        right.relations.map(x => includeRelationToJoinIncludeRecursive(rightSubQueryable, right.classType.runtimeClass, x))
+        right.relations.filterNot(x => x.inhibited).map(x => includeRelationToJoinIncludeRecursive(rightSubQueryable, right.classType.runtimeClass, x))
       else
         Seq()
 

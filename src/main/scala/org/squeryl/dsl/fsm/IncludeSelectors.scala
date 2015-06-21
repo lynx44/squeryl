@@ -12,6 +12,9 @@ trait IncludePathRelation {
   def relationshipAccessor[T](o: Any): T
   def right: IncludePathCommon
   def equalityExpressionAccessor(m: Any, o: Any): EqualityExpression
+  def inhibited: Boolean = _inhibitedByWhen
+
+  private [squeryl] var _inhibitedByWhen = false
 
   protected def getUnderlyingValue(o: Any): Any = {
     if(o.isInstanceOf[Option[Any]])
@@ -45,7 +48,7 @@ trait IncludePathCommon {
 class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelation])
   extends IncludePathCommon {
 
-    private val lastPath = allRelations.lastOption.map(_.right).getOrElse(head)
+  private val lastPath = allRelations.lastOption.map(_.right).getOrElse(head)
 
     def -*[A](i: (P) => OneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
       val rightNode = new IncludePathNode[A]()
@@ -66,7 +69,13 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
     }
 
     def ->>(i: (PathBuilder[P] => PathBuilder[_])*)(implicit schema: Schema, mClass: ClassTag[P]): PathBuilder[_] = {
-      val allPaths = i.map(_(this))
+      i.foreach(_(this))
+      this
+    }
+
+    def inhibitWhen(inhibited: Boolean): PathBuilder[_] = {
+      allRelations.lastOption.foreach(_._inhibitedByWhen = inhibited)
+      lastPath.relations.foreach(_._inhibitedByWhen = inhibited)
       this
     }
 
@@ -86,7 +95,6 @@ class OneToManyIncludePathRelation[O, M](accessor: O => OneToMany[M], override v
   def relationshipAccessor[T](o: Any): T = accessor(o.asInstanceOf[O]).asInstanceOf[T]
 
   def equalityExpressionAccessor(o: Any, m: Any): EqualityExpression =
-//  val squerylRelation = right.schema.findRelationsFor(leftClass.asInstanceOf[Class[Any]], right.classType.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(if(leftSubqueryable.sample.isInstanceOf[Option[Any]]) leftSubqueryable.sample.asInstanceOf[Option[Any]].get else leftSubqueryable.sample, rightSubQueryable.sample.asInstanceOf[Option[Any]].get)
     schema.findOneToManyRelationsFor(oClass.runtimeClass.asInstanceOf[Class[O]], mClass.runtimeClass.asInstanceOf[Class[Any]]).head.equalityExpression.apply(getUnderlyingValue(o).asInstanceOf[O], getUnderlyingValue(m))
 
   val joinedQueryable: JoinedQueryable[_] = new OuterJoinedQueryable[Any](table.asInstanceOf[Queryable[Any]], "left")
