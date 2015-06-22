@@ -17,13 +17,11 @@ package org.squeryl.dsl
 
 import java.sql.ResultSet
 
+import org.squeryl.Query
 import org.squeryl.dsl.ast._
 import org.squeryl.dsl.boilerplate._
-import org.squeryl.dsl.fsm.{IncludePathCommon, IncludedPropertiesQueryYield, PathBuilder}
+import org.squeryl.dsl.fsm.IncludePathCommon
 import org.squeryl.internals.ResultSetMapper
-import org.squeryl.{Query, Schema}
-
-import scala.reflect.ClassTag
 
 trait QueryYield[R] {
 

@@ -67,7 +67,7 @@ object IncludeSchema extends Schema {
   }
 }
 
-class IncludeTest extends DbTestBase {
+abstract class IncludeTest extends DbTestBase {
   self: DBConnector =>
 
   //TODO: composite key test
