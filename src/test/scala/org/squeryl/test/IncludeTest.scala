@@ -10,35 +10,35 @@ import scala.util.{Success, Failure, Try}
 case class Manager(val name: String) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val employees = IncludeSchema.manager_employee_relation.leftStateful(this)
-  lazy val responsibilities = IncludeSchema.manager_responsibility_relation.leftStateful(this)
+  lazy val employees = IncludeSchema.manager_employee_relation.leftStateful(this, false)
+  lazy val responsibilities = IncludeSchema.manager_responsibility_relation.leftStateful(this, false)
 }
 
 case class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val benefits = IncludeSchema.employee_benefit_relation.leftStateful(this)
-  lazy val manager = IncludeSchema.manager_employee_relation.rightStateful(this)
+  lazy val benefits = IncludeSchema.employee_benefit_relation.leftStateful(this, false)
+  lazy val manager = IncludeSchema.manager_employee_relation.rightStateful(this, false)
 }
 
 case class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val types = IncludeSchema.responsibility_responsibilityType_relation.leftStateful(this)
+  lazy val types = IncludeSchema.responsibility_responsibilityType_relation.leftStateful(this, false)
 }
 
 case class ResponsibilityType(val name: String, val responsibilityId: Long, val managerId: Long) extends KeyedEntity[CompositeKey2[Long, Long]] {
   def id = compositeKey(responsibilityId, managerId)
 
-  lazy val responsibility = IncludeSchema.responsibility_responsibilityType_relation.rightStateful(this)
+  lazy val responsibility = IncludeSchema.responsibility_responsibilityType_relation.rightStateful(this, false)
 }
 
 case class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val categories = IncludeSchema.benefit_category_relation.leftStateful(this)
-  lazy val expenses = IncludeSchema.benefit_expense_relation.leftStateful(this)
-  lazy val employee = IncludeSchema.employee_benefit_relation.rightStateful(this)
+  lazy val categories = IncludeSchema.benefit_category_relation.leftStateful(this, false)
+  lazy val expenses = IncludeSchema.benefit_expense_relation.leftStateful(this, false)
+  lazy val employee = IncludeSchema.employee_benefit_relation.rightStateful(this, false)
 }
 
 case class Category(val name: String, val benefitId: Long) extends KeyedEntity[Long] {

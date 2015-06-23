@@ -37,20 +37,21 @@ trait OneToManyRelation[O,M] extends Relation[O,M] {
 
   def left(leftSide: O): OneToMany[M]
 
-  def leftStateful(leftSide: O) = new StatefulOneToMany[M](left(leftSide))
+  def leftStateful(leftSide: O, autoFill: Boolean =  true) = new StatefulOneToMany[M](left(leftSide), autoFill)
 
   def right(rightSide: M): ManyToOne[O]
 
-  def rightStateful(rightSide: M) = new StatefulManyToOne[O](right(rightSide))
+  def rightStateful(rightSide: M, autoFill: Boolean =  true) = new StatefulManyToOne[O](right(rightSide), autoFill)
 
   def equalityExpression: (O,M)=>EqualityExpression
 }
 
-class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
+class StatefulOneToMany[M](val relation: OneToMany[M], autoFill: Boolean) extends Iterable[M] {
 
   private val _buffer = new ArrayBuffer[M]
 
-  refresh
+  if(autoFill)
+    refresh
   
   def refresh = {
     _buffer.clear
@@ -78,11 +79,12 @@ class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
   }
 }
 
-class StatefulManyToOne[O](val relation: ManyToOne[O]) {
+class StatefulManyToOne[O](val relation: ManyToOne[O], autoFill: Boolean) {
 
   private var _one: Option[O] = None
 
-  refresh
+  if(autoFill)
+    refresh
 
   def refresh = 
     _one = relation.iterator.toSeq.headOption
@@ -115,11 +117,11 @@ trait ManyToManyRelation[L, R, A] extends Relation[L,R] {
 
   def left(leftSide: L): ManyToMany[R,A]
 
-  def leftStateful(leftSide: L) = new StatefulManyToMany[R,A](left(leftSide))
+  def leftStateful(leftSide: L, autoFill: Boolean =  true) = new StatefulManyToMany[R,A](left(leftSide), autoFill)
 
   def right(rightSide: R): ManyToMany[L,A]
 
-  def rightStateful(rightSide: R) = new StatefulManyToMany[L,A](right(rightSide))
+  def rightStateful(rightSide: R, autoFill: Boolean =  true) = new StatefulManyToMany[L,A](right(rightSide), autoFill)
 }
 
 
@@ -201,11 +203,12 @@ trait ManyToMany[O,A] extends Query[O] {
 }
 
 
-class StatefulManyToMany[O,A](val relation: ManyToMany[O,A]) extends Iterable[O] {
+class StatefulManyToMany[O,A](val relation: ManyToMany[O,A], autoFill: Boolean) extends Iterable[O] {
   
   private val _map = new HashMap[O,A]
 
-  refresh
+  if(autoFill)
+    refresh
 
   def refresh = {
     _map.clear
