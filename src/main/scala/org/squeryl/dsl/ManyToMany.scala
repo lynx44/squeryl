@@ -71,6 +71,11 @@ class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
     _buffer.clear
     r
   }
+  
+  private [squeryl] def fill(m: Iterable[M]) = {
+    _buffer.clear()
+    m.foreach(_buffer.append(_))
+  }
 }
 
 class StatefulManyToOne[O](val relation: ManyToOne[O]) {
@@ -95,6 +100,8 @@ class StatefulManyToOne[O](val relation: ManyToOne[O]) {
     _one = None
     b
   }
+
+  private [squeryl] def fill(o: Option[O]) = _one = o
 }
 
 trait ManyToManyRelation[L, R, A] extends Relation[L,R] {
@@ -262,8 +269,6 @@ trait OneToMany[M] extends Query[M] {
   def associate(m: M): M
   
   def deleteAll: Int
-
-  private [squeryl] def fill(o: Iterable[M])
 }
 
 trait ManyToOne[O] extends Query[O] {
@@ -276,6 +281,4 @@ trait ManyToOne[O] extends Query[O] {
   def assign(one: O): O
 
   def delete: Boolean
-
-  private [squeryl] def fill(o: Iterable[O])
 }

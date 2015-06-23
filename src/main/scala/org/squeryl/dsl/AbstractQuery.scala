@@ -333,12 +333,12 @@ abstract class AbstractQuery[R](
               val includeRelation = includeRelationOption.get
               includeRelation match {
                   case x: OneToManyIncludePathRelation[_, _] => {
-                    val relationship = includeRelation.relationshipAccessor[OneToMany[Any]](parentData.get)
+                    val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parentData.get)
                     relationship.fill(fillEntities)
                   }
                   case y: ManyToOneIncludePathRelation[_, _] => {
-                    val relationship = includeRelation.relationshipAccessor[ManyToOne[Any]](parentData.get)
-                    relationship.fill(fillEntities)
+                    val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parentData.get)
+                    relationship.fill(fillEntities.headOption)
                   }
                 }
             }

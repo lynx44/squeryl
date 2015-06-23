@@ -669,11 +669,8 @@ trait QueryDsl
 
       new DelegateQuery(q) with OneToMany[M] {
 
-        def deleteAll = {
-          val count = rightTable.deleteWhere(m => f(leftSide, m))
-          this.resetIncludes
-          count
-        }
+        def deleteAll =
+          rightTable.deleteWhere(m => f(leftSide, m))
 
         def assign(m: M) = {
           val m0 = m.asInstanceOf[AnyRef]
@@ -686,14 +683,8 @@ trait QueryDsl
 
         def associate(m: M) = {
           assign(m)
-          val value = rightTable.insertOrUpdate(m)(kedM)
-          this.resetIncludes
-          value
+          rightTable.insertOrUpdate(m)(kedM)
         }
-
-        private [squeryl] def fill(o: Iterable[M]): Unit = this.subCollection = Option(o)
-
-        private def resetIncludes = this.subCollection = None
 
         private[squeryl] def genericType: Class[M] = manyType
       }
@@ -716,8 +707,6 @@ trait QueryDsl
 
         def delete =
           leftTable.deleteWhere(o => f(o, rightSide)) > 0
-
-        private [squeryl] def fill(o: Iterable[O]) = this.subCollection = Option(o)
       }
     }
 

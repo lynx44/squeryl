@@ -10,40 +10,35 @@ import scala.util.{Success, Failure, Try}
 case class Manager(val name: String) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val employees = IncludeSchema.manager_employee_relation.left(this)
-  lazy val responsibilities = IncludeSchema.manager_responsibility_relation.left(this)
+  lazy val employees = IncludeSchema.manager_employee_relation.leftStateful(this)
+  lazy val responsibilities = IncludeSchema.manager_responsibility_relation.leftStateful(this)
 }
 
 case class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val benefits = IncludeSchema.employee_benefit_relation.left(this)
-  lazy val manager = IncludeSchema.manager_employee_relation.right(this)
-//  lazy val hireInfo = IncludeSchema.hireInfo_employee_relation.right(this)
+  lazy val benefits = IncludeSchema.employee_benefit_relation.leftStateful(this)
+  lazy val manager = IncludeSchema.manager_employee_relation.rightStateful(this)
 }
-
-//class HireInfo(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
-//  val id: Long = 0
-//}
 
 case class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val types = IncludeSchema.responsibility_responsibilityType_relation.left(this)
+  lazy val types = IncludeSchema.responsibility_responsibilityType_relation.leftStateful(this)
 }
 
 case class ResponsibilityType(val name: String, val responsibilityId: Long, val managerId: Long) extends KeyedEntity[CompositeKey2[Long, Long]] {
   def id = compositeKey(responsibilityId, managerId)
 
-  lazy val responsibility = IncludeSchema.responsibility_responsibilityType_relation.right(this)
+  lazy val responsibility = IncludeSchema.responsibility_responsibilityType_relation.rightStateful(this)
 }
 
 case class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
-  lazy val categories = IncludeSchema.benefit_category_relation.left(this)
-  lazy val expenses = IncludeSchema.benefit_expense_relation.left(this)
-  lazy val employee = IncludeSchema.employee_benefit_relation.right(this)
+  lazy val categories = IncludeSchema.benefit_category_relation.leftStateful(this)
+  lazy val expenses = IncludeSchema.benefit_expense_relation.leftStateful(this)
+  lazy val employee = IncludeSchema.employee_benefit_relation.rightStateful(this)
 }
 
 case class Category(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
@@ -227,21 +222,21 @@ abstract class IncludeTest extends DbTestBase {
     }
   }
 
-  test("include oneToMany - can assign children") {
-    implicit val schema = IncludeSchema
-    transaction {
-      IncludeSchema.reset
-    }
-
-    val (p, data) = transaction {
-      val p = IncludeSchema.managers.insert(new Manager("person"))
-
-      (p, from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head)
-    }
-    val c = new Employee("child", p.id)
-
-    data.employees.assign(c)
-  }
+//  test("include oneToMany - can assign children") {
+//    implicit val schema = IncludeSchema
+//    transaction {
+//      IncludeSchema.reset
+//    }
+//
+//    val (p, data) = transaction {
+//      val p = IncludeSchema.managers.insert(new Manager("person"))
+//
+//      (p, from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head)
+//    }
+//    val c = new Employee("child", p.id)
+//
+//    data.employees.assign(c)
+//  }
 
   test("include oneToMany - with no data returns empty size") {
     implicit val schema = IncludeSchema
@@ -393,8 +388,8 @@ abstract class IncludeTest extends DbTestBase {
       from(IncludeSchema.employees)(p => select(p) include(_.*-(_.manager))).head
     }
 
-    assert(data.manager.size == 1)
-    assert(data.manager.head.name == "manager")
+    assert(data.manager.one.nonEmpty)
+    assert(data.manager.one.get.name == "manager")
   }
 
   test("include manyToOne - oneToMany to manyToOne nested") {
@@ -455,12 +450,12 @@ abstract class IncludeTest extends DbTestBase {
     assert(data.benefits.head.expenses.head.name == "expense1")
     assert(data.benefits.head.categories.size == 0)
 
-    assert(data.manager.size == 1)
-    assert(data.manager.head.name == "manager1")
-    assert(data.manager.head.responsibilities.size == 1)
-    assert(data.manager.head.responsibilities.head.name == "responsibility1")
-    assert(data.manager.head.responsibilities.head.types.size == 1)
-    assert(data.manager.head.responsibilities.head.types.head.name == "responsibilityType1")
+    assert(data.manager.one.nonEmpty)
+    assert(data.manager.one.get.name == "manager1")
+    assert(data.manager.one.get.responsibilities.size == 1)
+    assert(data.manager.one.get.responsibilities.head.name == "responsibility1")
+    assert(data.manager.one.get.responsibilities.head.types.size == 1)
+    assert(data.manager.one.get.responsibilities.head.types.head.name == "responsibilityType1")
   }
 
   // end many to one tests
