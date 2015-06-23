@@ -303,7 +303,7 @@ abstract class AbstractQuery[R](
         def findCanonicalRowData(d: Option[KeyedEntity[_]]): Option[KeyedEntity[_]] = {
 
           def findGroupColumn: Option[Map[GroupedData, Iterable[IncludeRowData]]] = {
-            groupedColumns.filter(_.filter(_._2.filter(_.entity == d).nonEmpty).nonEmpty).headOption
+            groupedColumns.filter(_.filter(_._2.filter(_.entity eq d).nonEmpty).nonEmpty).headOption
           }
 
           if(d.nonEmpty) {
@@ -386,35 +386,29 @@ abstract class AbstractQuery[R](
         def walkAndGetColumnLayout(left: JoinedIncludePath, collection: Seq[JoinedIncludePath]):
           Seq[JoinedIncludePath] = {
 
-            val newCollection =
-              if(left.relations != null)
-                left.relations.flatMap(walkAndGetColumnLayout(_, collection))
-              else
-                Seq()
+            val tempSeq = collection ++ Seq(left)
+            val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq))
 
-            newCollection ++ collection ++ Seq(left)
-          }
+            newCollection ++ tempSeq
+        }
 
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
-          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeRowData]):
+          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeRowData], isHead: Boolean = false):
             Seq[IncludeRowData] = {
 
               val value =
-                if(parent.nonEmpty)
+                if(!isHead)
                   left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
                 else
                   Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
 
-              val newCollection =
-                if(left.relations != null)
-                  left.relations.flatMap(walkAndRead(_, value, collection))
-                else
-                  Seq()
+              val tempSeq = collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
+              val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq))
 
-              newCollection ++ collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
+              newCollection ++ tempSeq
             }
 
-            val row = walkAndRead(joinedIncludes.get, None, List())
+            val row = walkAndRead(joinedIncludes.get, None, List(), true)
             row
           }
         ).toList

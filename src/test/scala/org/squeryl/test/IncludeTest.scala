@@ -1,53 +1,63 @@
 package org.squeryl.test
 
+import org.squeryl.dsl.CompositeKey2
 import org.squeryl.framework.{DBConnector, DbTestBase}
 import org.squeryl.test.PrimitiveTypeModeForTests._
 import org.squeryl.{KeyedEntity, Schema}
 
 import scala.util.{Success, Failure, Try}
 
-class Manager(val name: String) extends KeyedEntity[Long] {
+case class Manager(val name: String) extends KeyedEntity[Long] {
   val id: Long = 0
 
   lazy val employees = IncludeSchema.manager_employee_relation.left(this)
   lazy val responsibilities = IncludeSchema.manager_responsibility_relation.left(this)
 }
 
-class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
+case class Employee(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
   lazy val benefits = IncludeSchema.employee_benefit_relation.left(this)
   lazy val manager = IncludeSchema.manager_employee_relation.right(this)
+//  lazy val hireInfo = IncludeSchema.hireInfo_employee_relation.right(this)
 }
 
-class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
+//class HireInfo(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
+//  val id: Long = 0
+//}
+
+case class Responsibility(val name: String, val managerId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
   lazy val types = IncludeSchema.responsibility_responsibilityType_relation.left(this)
 }
 
-class ResponsibilityType(val name: String, val responsibilityId: Long) extends KeyedEntity[Long] {
-  val id: Long = 0
+case class ResponsibilityType(val name: String, val responsibilityId: Long, val managerId: Long) extends KeyedEntity[CompositeKey2[Long, Long]] {
+  def id = compositeKey(responsibilityId, managerId)
+
+  lazy val responsibility = IncludeSchema.responsibility_responsibilityType_relation.right(this)
 }
 
-class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
+case class Benefit(val name: String, val employeeId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 
   lazy val categories = IncludeSchema.benefit_category_relation.left(this)
   lazy val expenses = IncludeSchema.benefit_expense_relation.left(this)
+  lazy val employee = IncludeSchema.employee_benefit_relation.right(this)
 }
 
-class Category(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
+case class Category(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 }
 
-class Expense(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
+case class Expense(val name: String, val benefitId: Long) extends KeyedEntity[Long] {
   val id: Long = 0
 }
 
 object IncludeSchema extends Schema {
   val managers = table[Manager]
   val employees = table[Employee]
+//  val hireInfo = table[HireInfo]
   val responsibilities = table[Responsibility]
   val responsibilityTypes = table[ResponsibilityType]
   val benefits = table[Benefit]
@@ -58,6 +68,7 @@ object IncludeSchema extends Schema {
   val manager_responsibility_relation = oneToManyRelation(managers, responsibilities).via((m, r) => m.id === r.managerId)
   val responsibility_responsibilityType_relation = oneToManyRelation(responsibilities, responsibilityTypes).via((r, t) => r.id === t.responsibilityId)
   val employee_benefit_relation = oneToManyRelation(employees, benefits).via((e, b) => e.id === b.employeeId)
+//  val hireInfo_employee_relation = oneToManyRelation(hireInfo, employees).via((h, e) => h.employeeId === e.id)
   val benefit_category_relation = oneToManyRelation(benefits, categories).via((b, c) => b.id === c.benefitId)
   val benefit_expense_relation = oneToManyRelation(benefits, expenses).via((b, e) => b.id === e.benefitId)
 
@@ -324,7 +335,7 @@ abstract class IncludeTest extends DbTestBase {
       val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
       val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
       val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
-      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id))
+      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType", r.id, m.id))
 
       from(IncludeSchema.managers)(p => select(p)
       include(_.->>(_.-*(_.employees).-*(_.benefits), _.-*(_.responsibilities).-*(_.types)))).head
@@ -386,6 +397,28 @@ abstract class IncludeTest extends DbTestBase {
     assert(data.manager.head.name == "manager")
   }
 
+  test("include manyToOne - oneToMany to manyToOne nested") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("manager"))
+      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
+      val h = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+
+      from(IncludeSchema.employees)(p => select(p) include(_.*-(_.manager).-*(_.responsibilities).-*(_.types).*-(_.responsibility))).head
+    }
+
+//    assert(data.manager.head.employees.size == 1)
+//    assert(data.manager.head.employees.head.name == "employee")
+//    assert(data.manager.head.employees.head.benefits.size == 1)
+//    assert(data.manager.head.employees.head.benefits.head.name == "benefit")
+//    assert(data.manager.head.employees.head.benefits.head.employee.size == 1)
+//    assert(data.manager.head.employees.head.benefits.head.employee.head.name == "employee")
+  }
+
   test("include all different relations") {
     implicit val schema = IncludeSchema
     transaction {
@@ -395,11 +428,11 @@ abstract class IncludeTest extends DbTestBase {
     val data = transaction {
       val m2 = IncludeSchema.managers.insert(new Manager("badManager"))
       val r2 = IncludeSchema.responsibilities.insert(new Responsibility("badResponsibility", m2.id))
-      val rt2 = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("badResponsibilityType", r2.id))
+      val rt2 = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("badResponsibilityType", r2.id, m2.id))
 
       val m1 = IncludeSchema.managers.insert(new Manager("manager1"))
       val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility1", m1.id))
-      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType1", r.id))
+      val rt = IncludeSchema.responsibilityTypes.insert(new ResponsibilityType("responsibilityType1", r.id, m1.id))
 
       val e1 = IncludeSchema.employees.insert(new Employee("employee1", m1.id))
       val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
