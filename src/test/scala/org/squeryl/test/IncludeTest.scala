@@ -403,15 +403,27 @@ abstract class IncludeTest extends DbTestBase {
       val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
       val h = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
 
-      from(IncludeSchema.employees)(p => select(p) include(_.*-(_.manager).-*(_.responsibilities).-*(_.types).*-(_.responsibility))).head
+      from(IncludeSchema.employees)(p => select(p) include(_.*-(_.manager).-*(_.responsibilities).-*(_.types).*-(_.responsibility))).toList
+    }
+  }
+
+  test("include oneToMany - returns distinct of each entity with where clause when reincluding same type") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
     }
 
-//    assert(data.manager.head.employees.size == 1)
-//    assert(data.manager.head.employees.head.name == "employee")
-//    assert(data.manager.head.employees.head.benefits.size == 1)
-//    assert(data.manager.head.employees.head.benefits.head.name == "benefit")
-//    assert(data.manager.head.employees.head.benefits.head.employee.size == 1)
-//    assert(data.manager.head.employees.head.benefits.head.employee.head.name == "employee")
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("manager"))
+      val e1 = IncludeSchema.employees.insert(new Employee("employee1", m.id))
+      val e2 = IncludeSchema.employees.insert(new Employee("employee2", m.id))
+
+      from(IncludeSchema.employees)(p =>
+        where(p.id === e1.id)
+        select(p) include(_.*-(_.manager).-*(_.employees))).toList
+    }
+
+    assert(data.length == 1)
   }
 
   test("include all different relations") {

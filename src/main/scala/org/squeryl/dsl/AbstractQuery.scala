@@ -345,7 +345,7 @@ abstract class AbstractQuery[R](
           })
         }
 
-        groupedColumns.last.flatMap(x => x._2.map(y => findCanonicalRowData(y.entity).get.asInstanceOf[R])).toSeq
+        groupedColumns.last.flatMap(x => x._2.map(y => findCanonicalRowData(y.entity).get.asInstanceOf[R])).toSeq.distinct
       } else {
         Seq()
       }
