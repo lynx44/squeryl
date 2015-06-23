@@ -1,7 +1,7 @@
 package org.squeryl.dsl.fsm
 
 import org.squeryl._
-import org.squeryl.dsl.{StatefulManyToOne, StatefulOneToMany, ManyToOne, OneToMany}
+import org.squeryl.dsl._
 import org.squeryl.dsl.ast.EqualityExpression
 import org.squeryl.dsl.internal.{OuterJoinedQueryable, JoinedQueryable}
 import org.squeryl.internals.FieldReferenceLinker
@@ -50,7 +50,7 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
 
   private val lastPath = allRelations.lastOption.map(_.right).getOrElse(head)
 
-    def -*[A](i: (P) => StatefulOneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
+    def -*[A](i: (P) => IncludableOneToMany[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
       val rightNode = new IncludePathNode[A]()
       val relation = new OneToManyIncludePathRelation[P, A](i, rightNode)
 
@@ -59,7 +59,7 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
       new PathBuilder[A](head, allRelations ++ Seq(relation))
     }
   
-    def *-[A](i: (P) => StatefulManyToOne[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
+    def *-[A](i: (P) => IncludableManyToOne[A])(implicit s: Schema, mClass: ClassTag[P], pClass: ClassTag[A]): PathBuilder[A] = {
       val rightNode = new IncludePathNode[A]()
       val relation = new ManyToOneIncludePathRelation[P, A](i, rightNode)
 
@@ -88,7 +88,7 @@ class PathBuilder[P](head: IncludePathCommon, allRelations: Seq[IncludePathRelat
     def schema: Schema = head.schema
 }
 
-class OneToManyIncludePathRelation[O, M](accessor: O => StatefulOneToMany[M], override val right: IncludePathCommon)(implicit schema: Schema, oClass: ClassTag[O], mClass: ClassTag[M])
+class OneToManyIncludePathRelation[O, M](accessor: O => IncludableOneToMany[M], override val right: IncludePathCommon)(implicit schema: Schema, oClass: ClassTag[O], mClass: ClassTag[M])
   extends IncludePathRelation {
   val table = schema.findAllTablesFor(oClass.runtimeClass).head
   
@@ -102,7 +102,7 @@ class OneToManyIncludePathRelation[O, M](accessor: O => StatefulOneToMany[M], ov
   def classType: ClassTag[_] = oClass
 }
 
-class ManyToOneIncludePathRelation[M, O](accessor: M => StatefulManyToOne[O], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], oClass: ClassTag[O])
+class ManyToOneIncludePathRelation[M, O](accessor: M => IncludableManyToOne[O], override val right: IncludePathCommon)(implicit schema: Schema, mClass: ClassTag[M], oClass: ClassTag[O])
   extends IncludePathRelation {
   val table = schema.findAllTablesFor(oClass.runtimeClass).head
   

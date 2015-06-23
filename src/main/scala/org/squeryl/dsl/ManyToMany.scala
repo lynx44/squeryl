@@ -37,17 +37,44 @@ trait OneToManyRelation[O,M] extends Relation[O,M] {
 
   def left(leftSide: O): OneToMany[M]
 
-  def leftStateful(leftSide: O, autoFill: Boolean =  true) = new StatefulOneToMany[M](left(leftSide), autoFill)
+  def leftStateful(leftSide: O) = new StatefulOneToMany[M](left(leftSide))
+
+  def leftIncludable(leftSide: O) = new IncludableOneToMany[M](left(leftSide))
 
   def right(rightSide: M): ManyToOne[O]
 
-  def rightStateful(rightSide: M, autoFill: Boolean =  true) = new StatefulManyToOne[O](right(rightSide), autoFill)
+  def rightStateful(rightSide: M) = new StatefulManyToOne[O](right(rightSide))
+
+  def rightIncludable(rightSide: M) = new IncludableManyToOne[O](right(rightSide))
 
   def equalityExpression: (O,M)=>EqualityExpression
 }
 
-class StatefulOneToMany[M](val relation: OneToMany[M], autoFill: Boolean) extends Iterable[M] {
+class IncludableOneToMany[M](val rel: OneToMany[M]) extends StatefulOneToMany[M](rel) {
+  override protected val autoFill: Boolean = false
+  private var isFilled = false
 
+  override def iterator: Iterator[M] = {
+    if(!isFilled) {
+        refresh
+      }
+    super.iterator
+  }
+
+  override def refresh: Unit = { 
+    super.refresh
+    isFilled = true
+  }
+
+  override protected[squeryl] def fill(m: Iterable[M]): Unit = {
+    super.fill(m)
+    isFilled = true
+  }
+}
+
+class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
+
+  protected def autoFill: Boolean = true
   private val _buffer = new ArrayBuffer[M]
 
   if(autoFill)
@@ -73,14 +100,38 @@ class StatefulOneToMany[M](val relation: OneToMany[M], autoFill: Boolean) extend
     r
   }
   
-  private [squeryl] def fill(m: Iterable[M]) = {
+  protected [squeryl] def fill(m: Iterable[M]) = {
     _buffer.clear()
     m.foreach(_buffer.append(_))
   }
 }
 
-class StatefulManyToOne[O](val relation: ManyToOne[O], autoFill: Boolean) {
+class IncludableManyToOne[O](val rel: ManyToOne[O]) extends StatefulManyToOne[O](rel) {
+  
+  override protected def autoFill: Boolean = false
+  private var isFilled = false
 
+  override def one: Option[O] = {
+    if(!isFilled) {
+      refresh
+    }
+    super.one
+  }
+
+  override def refresh: Unit = {
+    super.refresh
+    isFilled = true
+  }
+
+  override protected[squeryl] def fill(o: Option[O]): Unit = {
+    super.fill(o)
+    isFilled = true
+  }
+}
+
+class StatefulManyToOne[O](val relation: ManyToOne[O]) {
+
+  protected def autoFill: Boolean = true
   private var _one: Option[O] = None
 
   if(autoFill)
@@ -103,7 +154,7 @@ class StatefulManyToOne[O](val relation: ManyToOne[O], autoFill: Boolean) {
     b
   }
 
-  private [squeryl] def fill(o: Option[O]) = _one = o
+  protected [squeryl] def fill(o: Option[O]) = _one = o
 }
 
 trait ManyToManyRelation[L, R, A] extends Relation[L,R] {
@@ -117,11 +168,11 @@ trait ManyToManyRelation[L, R, A] extends Relation[L,R] {
 
   def left(leftSide: L): ManyToMany[R,A]
 
-  def leftStateful(leftSide: L, autoFill: Boolean =  true) = new StatefulManyToMany[R,A](left(leftSide), autoFill)
+  def leftStateful(leftSide: L) = new StatefulManyToMany[R,A](left(leftSide))
 
   def right(rightSide: R): ManyToMany[L,A]
 
-  def rightStateful(rightSide: R, autoFill: Boolean =  true) = new StatefulManyToMany[L,A](right(rightSide), autoFill)
+  def rightStateful(rightSide: R) = new StatefulManyToMany[L,A](right(rightSide))
 }
 
 
@@ -202,13 +253,11 @@ trait ManyToMany[O,A] extends Query[O] {
   def associationMap: Query[(O,A)]
 }
 
-
-class StatefulManyToMany[O,A](val relation: ManyToMany[O,A], autoFill: Boolean) extends Iterable[O] {
+class StatefulManyToMany[O,A](val relation: ManyToMany[O,A]) extends Iterable[O] {
   
   private val _map = new HashMap[O,A]
 
-  if(autoFill)
-    refresh
+  refresh
 
   def refresh = {
     _map.clear
