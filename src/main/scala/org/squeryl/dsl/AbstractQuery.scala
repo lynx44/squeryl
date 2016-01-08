@@ -26,6 +26,7 @@ import org.squeryl.logging._
 import java.io.Closeable
 
 import scala.collection.immutable.HashMap
+import scala.reflect.ClassTag
 
 abstract class AbstractQuery[R](
     val isRoot:Boolean,
@@ -433,16 +434,55 @@ abstract class AbstractQuery[R](
           newCollection ++ tempSeq
         }
 
+        val cachedEntityData: collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]] = collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]]()
+        def cacheEntity(sample: Any, primaryKey: Any, entity: Option[KeyedEntity[_]]) = {
+          val cachedTableMap = cachedEntityData.filterKeys(c => c == sample).map(_._2).headOption
+          val tableMap =
+            cachedTableMap.fold({
+              val newMap = collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]()
+              cachedEntityData += ((sample, newMap))
+
+              newMap
+            })(a => a)
+
+          tableMap += ((primaryKey, entity))
+        }
+
+        def getCachedEntity(sample: Any, primaryKey: Any): Option[KeyedEntity[_]] = {
+          val cachedValue = cachedEntityData.filterKeys(c => c == sample).headOption.flatMap(_._2.filterKeys(_ == primaryKey).headOption.map(_._2))
+
+          cachedValue.getOrElse(None)
+        }
+
         val startTime = System.nanoTime()
+
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
           def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: List[IncludeRowData], isHead: Boolean = false):
             List[IncludeRowData] = {
 
               val value =
-                if(!isHead)
-                  left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-                else
-                  Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
+                if(!isHead){
+                  val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
+                  val sample = left.subQueryable.sample
+
+                  getCachedEntity(sample, primaryKey).fold({
+                      val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+                      cacheEntity(sample, primaryKey, keyedEntity)
+                      keyedEntity
+                   })(e =>
+                    Option(e))
+                }
+                else {
+                  val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
+                  val sample = left.subQueryable.sample
+
+                  getCachedEntity(sample, primaryKey).fold({
+                    val keyedEntity = Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[R]])
+                    cacheEntity(sample, primaryKey, keyedEntity)
+                    keyedEntity
+                  })(e =>
+                    Option(e).asInstanceOf[Option[KeyedEntity[R]]])
+                }
 
               val tempSeq = collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
               val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq)).toList
