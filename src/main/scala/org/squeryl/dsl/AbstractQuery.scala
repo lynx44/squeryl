@@ -280,36 +280,67 @@ abstract class AbstractQuery[R](
 
   private def _dbAdapter = Session.currentSession.databaseAdapter
 
-  private class IncludeIterable[R](data: Seq[Seq[IncludeRowData]], columnDef: Seq[JoinedIncludePath]) extends Iterator[R] {
+  case class GroupedData(keyValue: Option[Any], parentKeyValue: Option[Any], relation: Option[IncludePathRelation])
+
+  private class IncludeIterable[R](data: List[List[IncludeRowData]], columnDef: List[JoinedIncludePath], cachedCanonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]], cachedGroupColumn: collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]) extends Iterator[R] {
+    val startTime = System.nanoTime()
     private val structuredData: Seq[R] = {
-
-      class DataColumn(data: Seq[IncludeRowData]) extends Iterable[IncludeRowData] {
-        def iterator: Iterator[IncludeRowData] = data.iterator
-      }
-
-      case class GroupedData(keyValue: Option[Any], parentKeyValue: Option[Any], relation: Option[IncludePathRelation])
 
       if(data.nonEmpty) {
         val columnCount = data.head.length
         val columns = (0 to columnCount - 1).map(index => {
-          data.map(_(index))
-        })
+          data.map(_(index)).toList
+        }).toList
 
         val groupedColumns = columns.map(i =>
           i.groupBy(g =>
-            GroupedData(g.entity.map(_.id), g.parent.map(_.id), g.includePathRelation)))
+            GroupedData(g.entity.map(_.id), g.parent.map(_.id), g.includePathRelation))).toList
 
-        // gets the correct instance - the instance we're using for the specified key
+        val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
+        // gets the correct data instance - the instance we're using for the specified key
         def findCanonicalRowData(d: Option[KeyedEntity[_]]): Option[KeyedEntity[_]] = {
 
           def findGroupColumn: Option[Map[GroupedData, Iterable[IncludeRowData]]] = {
-            groupedColumns.filter(_.filter(_._2.filter(_.entity eq d).nonEmpty).nonEmpty).headOption
+            if(d.nonEmpty) {
+              val cachedValue = cachedGroupColumn.filterKeys(k => k == d.get).map(_._2).headOption
+              if(cachedValue.nonEmpty) {
+                return cachedValue.get
+              }
+              val value = groupedColumns.filter(_.filter(_._2.filter(_.entity eq d).nonEmpty).nonEmpty).headOption
+
+              cachedGroupColumn += ((d.get, value))
+
+              return value
+            }
+
+            None
+          }
+
+          def cacheValue(data: KeyedEntity[_]): Unit = {
+            val cachedTableMap = cachedCanonicalRowData.filterKeys(c => c == data.getClass()).map(_._2).headOption
+            val tableMap =
+              cachedTableMap.fold({
+                val newMap = collection.mutable.HashMap[Any, KeyedEntity[_]]()
+                cachedCanonicalRowData += ((data.getClass(), newMap))
+
+                newMap
+              })(a => a)
+
+            tableMap += ((data.id, data))
           }
 
           if(d.nonEmpty) {
+            val cachedValue = cachedCanonicalRowData.filterKeys(c => c == data.getClass()).headOption.flatMap(_._2.filterKeys(_ == d.get.id).headOption.map(_._2))
+            if(cachedValue.nonEmpty) {
+              return cachedValue
+            }
+
             val groupColumn = findGroupColumn
-            if(groupColumn.nonEmpty)
-              return groupColumn.get.filter(_._2.filter(_.entity.map(_.id == d.get.id).getOrElse(false)).nonEmpty).head._2.head.entity
+            if(groupColumn.nonEmpty) {
+              val entity = groupColumn.get.filter(_._2.filter(_.entity.map(_.id == d.get.id).getOrElse(false)).nonEmpty).head._2.head.entity
+              cacheValue(entity.get)
+              return entity
+            }
           }
 
           None
@@ -324,8 +355,8 @@ abstract class AbstractQuery[R](
           })
             .groupBy(_._2)
             .foreach(parentGroup => {
-            val entities = parentGroup._2.map(x => findCanonicalRowData(x._1._2.entity))
-            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get).toList
+            val entities = parentGroup._2.map(x => findCanonicalRowData(x._1._2.entity)).toList
+            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get)
 
             val includeRelationOption = columnDef(i).includePathRelation //parentGroup._2.head._1._2._2.includePathRelation.get
             val parentData = parentGroup._1
@@ -350,6 +381,11 @@ abstract class AbstractQuery[R](
         Seq()
       }
     }
+
+    val endTime = System.nanoTime()
+    val elapsed = endTime - startTime
+    println(s"elapsed time to create structured data: $elapsed ns")
+    nop()
 
     private val iterator = structuredData.iterator
     def hasNext: Boolean = iterator.hasNext
@@ -383,18 +419,18 @@ abstract class AbstractQuery[R](
     val includeIterable =
       if(sampleYield.includePath.nonEmpty)
       {
-        def walkAndGetColumnLayout(left: JoinedIncludePath, collection: Seq[JoinedIncludePath]):
-          Seq[JoinedIncludePath] = {
+        def walkAndGetColumnLayout(left: JoinedIncludePath, collection: List[JoinedIncludePath]):
+          List[JoinedIncludePath] = {
 
-            val tempSeq = collection ++ Seq(left)
-            val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq))
+            val tempSeq = collection ++ List(left)
+            val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq)).toList
 
             newCollection ++ tempSeq
         }
 
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
-          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: Seq[IncludeRowData], isHead: Boolean = false):
-            Seq[IncludeRowData] = {
+          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: List[IncludeRowData], isHead: Boolean = false):
+            List[IncludeRowData] = {
 
               val value =
                 if(!isHead)
@@ -403,7 +439,7 @@ abstract class AbstractQuery[R](
                   Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[_]])
 
               val tempSeq = collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
-              val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq))
+              val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq)).toList
 
               newCollection ++ tempSeq
             }
@@ -412,7 +448,9 @@ abstract class AbstractQuery[R](
             row
           }
         ).toList
-        Some(new IncludeIterable[R](valueMap, walkAndGetColumnLayout(joinedIncludes.get, List())))
+        val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
+        val canonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]] = collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]]()
+        Some(new IncludeIterable[R](valueMap, walkAndGetColumnLayout(joinedIncludes.get, List()), canonicalRowData, cachedGroupColumn))
       } else {
         None
       }
@@ -542,4 +580,6 @@ abstract class AbstractQuery[R](
   def except(q: Query[R]): Query[R] = createUnion("Except", q)
 
   def exceptAll(q: Query[R]): Query[R] = createUnion("Except All", q)
+
+  private def nop() = {}
 }
