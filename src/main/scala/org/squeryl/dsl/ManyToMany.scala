@@ -70,6 +70,11 @@ class IncludableOneToMany[M](val rel: OneToMany[M]) extends StatefulOneToMany[M]
     super.fill(m)
     isFilled = true
   }
+
+  override protected[squeryl] def add(entity: Option[M]): Unit = {
+    super.add(entity)
+    isFilled = true
+  }
 }
 
 class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
@@ -103,6 +108,11 @@ class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
   protected [squeryl] def fill(m: Iterable[M]) = {
     _buffer.clear()
     m.foreach(_buffer.append(_))
+  }
+
+  protected [squeryl] def add(entity: Option[M]): Unit = {
+    if(entity.nonEmpty && !_buffer.contains(entity.get))
+      _buffer += entity.get
   }
 }
 
@@ -154,7 +164,7 @@ class StatefulManyToOne[O](val relation: ManyToOne[O]) {
     b
   }
 
-  protected [squeryl] def fill(o: Option[O]) = _one = o
+  protected [squeryl] def fill(o: Option[O]): Unit = _one = o
 }
 
 trait ManyToManyRelation[L, R, A] extends Relation[L,R] {

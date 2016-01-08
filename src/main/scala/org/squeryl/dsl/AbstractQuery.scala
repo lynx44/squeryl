@@ -397,6 +397,12 @@ abstract class AbstractQuery[R](
 
     def next(): R = iterator.next
   }
+  private class IncludeIterable2[R](data: List[R]) extends Iterator[R] {
+    private val iterator = data.iterator
+    def hasNext: Boolean = iterator.hasNext
+
+    def next(): R = iterator.next
+  }
 
   private case class IncludeRowData(entity: Option[KeyedEntity[_]], parent: Option[KeyedEntity[_]], includePathRelation: Option[IncludePathRelation])
 
@@ -465,12 +471,28 @@ abstract class AbstractQuery[R](
                   val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
                   val sample = left.subQueryable.sample
 
-                  getCachedEntity(sample, primaryKey).fold({
-                      val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-                      cacheEntity(sample, primaryKey, keyedEntity)
-                      keyedEntity
-                   })(e =>
+                  val value = getCachedEntity(sample, primaryKey).fold({
+                    val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+                    cacheEntity(sample, primaryKey, keyedEntity)
+                    keyedEntity
+                  })(e =>
                     Option(e))
+
+                  if(left.includePathRelation.nonEmpty && parent.nonEmpty) {
+                    val includeRelation = left.includePathRelation.get
+                    includeRelation match {
+                      case x: OneToManyIncludePathRelation[_, _] => {
+                        val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parent.get)
+                        relationship.add(value)
+                      }
+                      case y: ManyToOneIncludePathRelation[_, _] => {
+                        val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parent.get)
+                        relationship.fill(value)
+                      }
+                    }
+                  }
+
+                  value
                 }
                 else {
                   val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
@@ -506,7 +528,16 @@ abstract class AbstractQuery[R](
         val columnLayoutElapsed = columnLayoutEndTime - columnLayoutStartTime
         println(s"walkAndGetColumnLayout: $columnLayoutElapsed ns")
 
-        Some(new IncludeIterable[R](valueMap, columnLayout, canonicalRowData, cachedGroupColumn))
+        val iter = joinedIncludes.fold(
+          new IncludeIterable2[R](List())
+        )(ji => {
+          val sample = ji.subQueryable.sample
+          val entityData = cachedEntityData.filterKeys(k => k == sample).map(_._2).flatMap(_.values).flatMap(_.asInstanceOf[Option[R]]).toList
+          new IncludeIterable2[R](entityData)
+        })
+
+//        val entityMap = valueMap(0).flatMap(_.entity).asInstanceOf[List[R]]
+        Some(iter)
       } else {
         None
       }
