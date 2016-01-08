@@ -59,7 +59,7 @@ abstract class AbstractQuery[R](
     val adjacentMembers =
       left.relations.filterNot(x => x.inhibited).map(includeRelation => {
         includeRelationToJoinIncludeRecursive(leftSubQueryable, left.classType.runtimeClass, includeRelation)
-      })
+      }).toList
 
     JoinedIncludePath(leftSubQueryable, None, None, None, adjacentMembers)
   }
@@ -79,9 +79,9 @@ abstract class AbstractQuery[R](
 
     val relations =
       if(right.relations != null)
-        right.relations.filterNot(x => x.inhibited).map(x => includeRelationToJoinIncludeRecursive(rightSubQueryable, right.classType.runtimeClass, x))
+        right.relations.filterNot(x => x.inhibited).map(x => includeRelationToJoinIncludeRecursive(rightSubQueryable, right.classType.runtimeClass, x)).toList
       else
-        Seq()
+        List()
 
     JoinedIncludePath(rightSubQueryable, Some(joinedQueryable), Some(joinLogicalBoolean), Some(includeRelation), relations)
   }
@@ -90,7 +90,7 @@ abstract class AbstractQuery[R](
                                 joinedQueryable: Option[JoinedQueryable[_]],
                                 joinCondition: Option[() => LogicalBoolean],
                                 includePathRelation: Option[IncludePathRelation],
-                                relations: Seq[JoinedIncludePath])
+                                relations: List[JoinedIncludePath])
 
   def sampleYield: QueryYield[R]
   
@@ -160,25 +160,29 @@ abstract class AbstractQuery[R](
     if(joinedIncludes.nonEmpty) {
       val leftQuery = subQueryables.head
 
-      def walkAndCollect(leftQueryable: SubQueryable[_], left: JoinedIncludePath, collected: Seq[(SubQueryable[_])]):
-        Seq[(SubQueryable[_])] = {
+      def walkAndCollect(leftQueryable: SubQueryable[_], left: JoinedIncludePath, collected: List[(SubQueryable[_])]):
+        List[(SubQueryable[_])] = {
 
         val newCollection =
           if(left.relations != null)
-            left.relations.flatMap(walkAndCollect(left.subQueryable, _, collected))
+            left.relations.flatMap(walkAndCollect(left.subQueryable, _, collected)).toList
           else
-            Seq()
+            List()
 
         if(left.joinedQueryable.nonEmpty) {
-          qy.joinExpressions ++= Seq(left.joinCondition.get)
+          qy.joinExpressions ++= List(left.joinCondition.get)
           left.subQueryable.node.joinExpression = Some(left.joinCondition.get())
-          newCollection ++ collected ++ Seq(left.subQueryable)
+          newCollection ++ collected ++ List(left.subQueryable)
         }
         else
           newCollection ++ collected
       }
 
-      val subQueryableAndJoinClause = walkAndCollect(null, joinedIncludes.get, Seq()).reverse
+      val startTime = System.nanoTime()
+      val subQueryableAndJoinClause = walkAndCollect(null, joinedIncludes.get, List()).reverse
+      val endTime = System.nanoTime()
+      val elapsed = endTime - startTime
+      println(s"subqueryable join clause: $elapsed ns")
       subQueryables ++ subQueryableAndJoinClause
     } else {
       subQueryables
@@ -284,7 +288,7 @@ abstract class AbstractQuery[R](
 
   private class IncludeIterable[R](data: List[List[IncludeRowData]], columnDef: List[JoinedIncludePath], cachedCanonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]], cachedGroupColumn: collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]) extends Iterator[R] {
     val startTime = System.nanoTime()
-    private val structuredData: Seq[R] = {
+    private val structuredData: List[R] = {
 
       if(data.nonEmpty) {
         val columnCount = data.head.length
@@ -358,7 +362,7 @@ abstract class AbstractQuery[R](
             val entities = parentGroup._2.map(x => findCanonicalRowData(x._1._2.entity)).toList
             val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get)
 
-            val includeRelationOption = columnDef(i).includePathRelation //parentGroup._2.head._1._2._2.includePathRelation.get
+            val includeRelationOption = columnDef(i).includePathRelation
             val parentData = parentGroup._1
             if(includeRelationOption.nonEmpty && parentData.nonEmpty) {
               val includeRelation = includeRelationOption.get
@@ -376,9 +380,9 @@ abstract class AbstractQuery[R](
           })
         }
 
-        groupedColumns.last.flatMap(x => x._2.map(y => findCanonicalRowData(y.entity).get.asInstanceOf[R])).toSeq.distinct
+        groupedColumns.last.flatMap(x => x._2.map(y => findCanonicalRowData(y.entity).get.asInstanceOf[R])).toList.distinct
       } else {
-        Seq()
+        List()
       }
     }
 
@@ -416,18 +420,20 @@ abstract class AbstractQuery[R](
 
     var rowCount = 0
 
+    val includeIterableStartTime = System.nanoTime()
     val includeIterable =
       if(sampleYield.includePath.nonEmpty)
       {
         def walkAndGetColumnLayout(left: JoinedIncludePath, collection: List[JoinedIncludePath]):
           List[JoinedIncludePath] = {
 
-            val tempSeq = collection ++ List(left)
-            val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq)).toList
+          val tempSeq = collection ++ List(left)
+          val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq)).toList
 
-            newCollection ++ tempSeq
+          newCollection ++ tempSeq
         }
 
+        val startTime = System.nanoTime()
         val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
           def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: List[IncludeRowData], isHead: Boolean = false):
             List[IncludeRowData] = {
@@ -448,14 +454,27 @@ abstract class AbstractQuery[R](
             row
           }
         ).toList
+        val endTime = System.nanoTime()
+        val elapsed = endTime - startTime
+        println(s"walkAndRead: $elapsed ns")
         val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
         val canonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]] = collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]]()
-        Some(new IncludeIterable[R](valueMap, walkAndGetColumnLayout(joinedIncludes.get, List()), canonicalRowData, cachedGroupColumn))
+
+        val columnLayoutStartTime = System.nanoTime()
+        val columnLayout = walkAndGetColumnLayout(joinedIncludes.get, List())
+        val columnLayoutEndTime = System.nanoTime()
+        val columnLayoutElapsed = columnLayoutEndTime - columnLayoutStartTime
+        println(s"walkAndGetColumnLayout: $columnLayoutElapsed ns")
+
+        Some(new IncludeIterable[R](valueMap, columnLayout, canonicalRowData, cachedGroupColumn))
       } else {
         None
       }
 
-    
+    val includeIterableEndTime = System.nanoTime()
+    val includeIterableElapsed = includeIterableEndTime - includeIterableStartTime
+    println(s"includeIterable: $includeIterableElapsed")
+
     def close {
       stmt.close
       rs.close
