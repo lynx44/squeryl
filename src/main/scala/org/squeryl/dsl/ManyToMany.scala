@@ -37,20 +37,20 @@ trait OneToManyRelation[O,M] extends Relation[O,M] {
 
   def left(leftSide: O): OneToMany[M]
 
-  def leftStateful(leftSide: O) = new StatefulOneToMany[M](left(leftSide))
+  def leftStateful(leftSide: O) = new StatefulOneToMany[M](() => left(leftSide))
 
-  def leftIncludable(leftSide: O) = new IncludableOneToMany[M](left(leftSide))
+  def leftIncludable(leftSide: O) = new IncludableOneToMany[M](() => left(leftSide))
 
   def right(rightSide: M): ManyToOne[O]
 
-  def rightStateful(rightSide: M) = new StatefulManyToOne[O](right(rightSide))
+  def rightStateful(rightSide: M) = new StatefulManyToOne[O](() => right(rightSide))
 
-  def rightIncludable(rightSide: M) = new IncludableManyToOne[O](right(rightSide))
+  def rightIncludable(rightSide: M) = new IncludableManyToOne[O](() => right(rightSide))
 
   def equalityExpression: (O,M)=>EqualityExpression
 }
 
-class IncludableOneToMany[M](val rel: OneToMany[M]) extends StatefulOneToMany[M](rel) {
+class IncludableOneToMany[M](rel: () => OneToMany[M]) extends StatefulOneToMany[M](rel) {
   override protected val autoFill: Boolean = false
   private var isFilled = false
 
@@ -61,7 +61,8 @@ class IncludableOneToMany[M](val rel: OneToMany[M]) extends StatefulOneToMany[M]
     super.iterator
   }
 
-  override def refresh: Unit = { 
+  override def refresh: Unit = {
+    println("refresh called")
     super.refresh
     isFilled = true
   }
@@ -77,15 +78,16 @@ class IncludableOneToMany[M](val rel: OneToMany[M]) extends StatefulOneToMany[M]
   }
 }
 
-class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
+class StatefulOneToMany[M](val rel: () => OneToMany[M]) extends Iterable[M] {
 
   protected def autoFill: Boolean = true
   private val _buffer = new ArrayBuffer[M]
+  private lazy val relation = rel()
 
   if(autoFill)
     refresh
   
-  def refresh = {
+  def refresh: Unit = {
     _buffer.clear
     for(m <- relation.iterator.toSeq)
       _buffer.append(m)
@@ -116,7 +118,7 @@ class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
   }
 }
 
-class IncludableManyToOne[O](val rel: ManyToOne[O]) extends StatefulManyToOne[O](rel) {
+class IncludableManyToOne[O](rel: () => ManyToOne[O]) extends StatefulManyToOne[O](rel) {
   
   override protected def autoFill: Boolean = false
   private var isFilled = false
@@ -129,6 +131,7 @@ class IncludableManyToOne[O](val rel: ManyToOne[O]) extends StatefulManyToOne[O]
   }
 
   override def refresh: Unit = {
+    println("refresh called")
     super.refresh
     isFilled = true
   }
@@ -139,10 +142,11 @@ class IncludableManyToOne[O](val rel: ManyToOne[O]) extends StatefulManyToOne[O]
   }
 }
 
-class StatefulManyToOne[O](val relation: ManyToOne[O]) {
+class StatefulManyToOne[O](val rel: () => ManyToOne[O]) {
 
   protected def autoFill: Boolean = true
   private var _one: Option[O] = None
+  private lazy val relation = rel()
 
   if(autoFill)
     refresh

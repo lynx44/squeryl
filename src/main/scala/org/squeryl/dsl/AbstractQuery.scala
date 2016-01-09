@@ -287,127 +287,13 @@ abstract class AbstractQuery[R](
 
   case class GroupedData(keyValue: Option[Any], parentKeyValue: Option[Any], relation: Option[IncludePathRelation])
 
-  private class IncludeIterable[R](data: List[List[IncludeRowData]], columnDef: List[JoinedIncludePath], cachedCanonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]], cachedGroupColumn: collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]) extends Iterator[R] {
-    val startTime = System.nanoTime()
-    private val structuredData: List[R] = {
-
-      if(data.nonEmpty) {
-        val columnCount = data.head.length
-        val columns = (0 to columnCount - 1).map(index => {
-          data.map(_(index)).toList
-        }).toList
-
-        val groupedColumns = columns.map(i =>
-          i.groupBy(g =>
-            GroupedData(g.entity.map(_.id), g.parent.map(_.id), g.includePathRelation))).toList
-
-        val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
-        // gets the correct data instance - the instance we're using for the specified key
-        def findCanonicalRowData(d: Option[KeyedEntity[_]]): Option[KeyedEntity[_]] = {
-
-          def findGroupColumn: Option[Map[GroupedData, Iterable[IncludeRowData]]] = {
-            if(d.nonEmpty) {
-              val cachedValue = cachedGroupColumn.filterKeys(k => k == d.get).map(_._2).headOption
-              if(cachedValue.nonEmpty) {
-                return cachedValue.get
-              }
-              val value = groupedColumns.filter(_.filter(_._2.filter(_.entity eq d).nonEmpty).nonEmpty).headOption
-
-              cachedGroupColumn += ((d.get, value))
-
-              return value
-            }
-
-            None
-          }
-
-          def cacheValue(data: KeyedEntity[_]): Unit = {
-            val cachedTableMap = cachedCanonicalRowData.filterKeys(c => c == data.getClass()).map(_._2).headOption
-            val tableMap =
-              cachedTableMap.fold({
-                val newMap = collection.mutable.HashMap[Any, KeyedEntity[_]]()
-                cachedCanonicalRowData += ((data.getClass(), newMap))
-
-                newMap
-              })(a => a)
-
-            tableMap += ((data.id, data))
-          }
-
-          if(d.nonEmpty) {
-            val cachedValue = cachedCanonicalRowData.filterKeys(c => c == data.getClass()).headOption.flatMap(_._2.filterKeys(_ == d.get.id).headOption.map(_._2))
-            if(cachedValue.nonEmpty) {
-              return cachedValue
-            }
-
-            val groupColumn = findGroupColumn
-            if(groupColumn.nonEmpty) {
-              val entity = groupColumn.get.filter(_._2.filter(_.entity.map(_.id == d.get.id).getOrElse(false)).nonEmpty).head._2.head.entity
-              cacheValue(entity.get)
-              return entity
-            }
-          }
-
-          None
-        }
-
-        for (i <- 0 to columnCount - 1) {
-          val columnGroup = groupedColumns(i)
-          val keysAndIterableRow = columnGroup.map(g => (g._1, g._2.head))
-          keysAndIterableRow.map(keyAndIterableRow => {
-            val finalParent = findCanonicalRowData(keyAndIterableRow._2.parent)
-            (keyAndIterableRow, finalParent)
-          })
-            .groupBy(_._2)
-            .foreach(parentGroup => {
-            val entities = parentGroup._2.map(x => findCanonicalRowData(x._1._2.entity)).toList
-            val fillEntities = entities.filterNot(z => z.isEmpty).map(_.get)
-
-            val includeRelationOption = columnDef(i).includePathRelation
-            val parentData = parentGroup._1
-            if(includeRelationOption.nonEmpty && parentData.nonEmpty) {
-              val includeRelation = includeRelationOption.get
-              includeRelation match {
-                  case x: OneToManyIncludePathRelation[_, _] => {
-                    val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parentData.get)
-                    relationship.fill(fillEntities)
-                  }
-                  case y: ManyToOneIncludePathRelation[_, _] => {
-                    val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parentData.get)
-                    relationship.fill(fillEntities.headOption)
-                  }
-                }
-            }
-          })
-        }
-
-        groupedColumns.last.flatMap(x => x._2.map(y => findCanonicalRowData(y.entity).get.asInstanceOf[R])).toList.distinct
-      } else {
-        List()
-      }
-    }
-
-    val endTime = System.nanoTime()
-    val elapsed = endTime - startTime
-    println(s"elapsed time to create structured data: $elapsed ns")
-    nop()
-
-    private val iterator = structuredData.iterator
-    def hasNext: Boolean = iterator.hasNext
-
-    def next(): R = iterator.next
-  }
-  private class IncludeIterable2[R](data: List[R]) extends Iterator[R] {
-    private val iterator = data.iterator
-    def hasNext: Boolean = iterator.hasNext
-
-    def next(): R = iterator.next
-  }
-
   private case class IncludeRowData(entity: Option[KeyedEntity[_]], parent: Option[KeyedEntity[_]], includePathRelation: Option[IncludePathRelation])
 
-  def iterator = new Iterator[R] with Closeable {
+  def iterator = if(sampleYield.includePath.nonEmpty) {
+      new IncludeIterator
+    } else {
 
+  new Iterator[R] with Closeable {
     val iteratorStartTime = System.nanoTime()
     val sw = new StatementWriter(false, _dbAdapter)
     ast.write(sw)
@@ -431,127 +317,6 @@ abstract class AbstractQuery[R](
 
     var rowCount = 0
 
-    println(s"Beginning of iteration (pre include iterable): ${System.nanoTime() - iteratorStartTime} ns")
-
-    val includeIterableStartTime = System.nanoTime()
-    val includeIterable =
-      if(sampleYield.includePath.nonEmpty)
-      {
-        def walkAndGetColumnLayout(left: JoinedIncludePath, collection: List[JoinedIncludePath]):
-          List[JoinedIncludePath] = {
-
-          val tempSeq = collection ++ List(left)
-          val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq)).toList
-
-          newCollection ++ tempSeq
-        }
-
-        val cachedEntityData: collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]] = collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]]()
-        def cacheEntity(sample: Any, primaryKey: Any, entity: Option[KeyedEntity[_]]) = {
-          val cachedTableMap = cachedEntityData.filterKeys(c => c == sample).map(_._2).headOption
-          val tableMap =
-            cachedTableMap.fold({
-              val newMap = collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]()
-              cachedEntityData += ((sample, newMap))
-
-              newMap
-            })(a => a)
-
-          tableMap += ((primaryKey, entity))
-        }
-
-        def getCachedEntity(sample: Any, primaryKey: Any): Option[KeyedEntity[_]] = {
-          val cachedValue = cachedEntityData.filterKeys(c => c == sample).headOption.flatMap(_._2.filterKeys(_ == primaryKey).headOption.map(_._2))
-
-          cachedValue.getOrElse(None)
-        }
-
-        val startTime = System.nanoTime()
-
-        val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
-          def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: List[IncludeRowData], isHead: Boolean = false):
-            List[IncludeRowData] = {
-
-              val value =
-                if(!isHead){
-                  val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
-                  val sample = left.subQueryable.sample
-
-                  val value = getCachedEntity(sample, primaryKey).fold({
-                    val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-                    cacheEntity(sample, primaryKey, keyedEntity)
-                    keyedEntity
-                  })(e =>
-                    Option(e))
-
-                  if(left.includePathRelation.nonEmpty && parent.nonEmpty) {
-                    val includeRelation = left.includePathRelation.get
-                    includeRelation match {
-                      case x: OneToManyIncludePathRelation[_, _] => {
-                        val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parent.get)
-                        relationship.add(value)
-                      }
-                      case y: ManyToOneIncludePathRelation[_, _] => {
-                        val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parent.get)
-                        relationship.fill(value)
-                      }
-                    }
-                  }
-
-                  value
-                }
-                else {
-                  val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
-                  val sample = left.subQueryable.sample
-
-                  getCachedEntity(sample, primaryKey).fold({
-                    val keyedEntity = Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[R]])
-                    cacheEntity(sample, primaryKey, keyedEntity)
-                    keyedEntity
-                  })(e =>
-                    Option(e).asInstanceOf[Option[KeyedEntity[R]]])
-                }
-
-              val tempSeq = collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
-              val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq)).toList
-
-              newCollection ++ tempSeq
-            }
-
-            val row = walkAndRead(joinedIncludes.get, None, List(), true)
-            row
-          }
-        ).toList
-        val endTime = System.nanoTime()
-        val elapsed = endTime - startTime
-        println(s"walkAndRead: $elapsed ns")
-        val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
-        val canonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]] = collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]]()
-
-        val columnLayoutStartTime = System.nanoTime()
-        val columnLayout = walkAndGetColumnLayout(joinedIncludes.get, List())
-        val columnLayoutEndTime = System.nanoTime()
-        val columnLayoutElapsed = columnLayoutEndTime - columnLayoutStartTime
-        println(s"walkAndGetColumnLayout: $columnLayoutElapsed ns")
-
-        val iter = joinedIncludes.fold(
-          new IncludeIterable2[R](List())
-        )(ji => {
-          val sample = ji.subQueryable.sample
-          val entityData = cachedEntityData.filterKeys(k => k == sample).map(_._2).flatMap(_.values).flatMap(_.asInstanceOf[Option[R]]).toList
-          new IncludeIterable2[R](entityData)
-        })
-
-//        val entityMap = valueMap(0).flatMap(_.entity).asInstanceOf[List[R]]
-        Some(iter)
-      } else {
-        None
-      }
-
-    val includeIterableEndTime = System.nanoTime()
-    val includeIterableElapsed = includeIterableEndTime - includeIterableStartTime
-    println(s"includeIterable: $includeIterableElapsed")
-
     def close {
       stmt.close
       rs.close
@@ -573,13 +338,13 @@ abstract class AbstractQuery[R](
       _nextCalled = true
     }
 
-    def hasNext = includeIterable.map(_.hasNext).getOrElse({
+    def hasNext = {
       if(!_nextCalled)
         _next
       _hasNext
-    })
+    }
 
-    def next: R = includeIterable.map(_.next).getOrElse({
+    def next: R = {
       if(!_nextCalled)
         _next
       if(!_hasNext)
@@ -590,7 +355,143 @@ abstract class AbstractQuery[R](
         s.log(ResultSetUtils.dumpRow(rs))
 
       give(resultSetMapper, rs)
+    }
+  }
+}
+
+  private class IncludeIterator extends Iterator[R] with Closeable {
+    val iteratorStartTime = System.nanoTime()
+    val sw = new StatementWriter(false, _dbAdapter)
+    ast.write(sw)
+    val s = Session.currentSession
+    val beforeQueryExecute = System.currentTimeMillis
+    val queryStartTime = System.nanoTime()
+    val (rs, stmt) = _dbAdapter.executeQuery(s, sw)
+    println(s"stmt: ${stmt}")
+    println(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
+
+    lazy val statEx = new StatementInvocationEvent(definitionSite.get, beforeQueryExecute, System.currentTimeMillis, -1, sw.statement)
+
+    if(s.statisticsListener != None)
+      s.statisticsListener.get.queryExecuted(statEx)
+
+    s._addStatement(stmt) // if the iteration doesn't get completed, we must hang on to the statement to clean it up at session end.
+    s._addResultSet(rs) // same for the result set
+
+    def walkAndGetColumnLayout(left: JoinedIncludePath, collection: List[JoinedIncludePath]):
+    List[JoinedIncludePath] = {
+
+      val tempSeq = collection ++ List(left)
+      val newCollection = left.relations.flatMap(walkAndGetColumnLayout(_, tempSeq)).toList
+
+      newCollection ++ tempSeq
+    }
+
+    val cachedEntityData: collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]] = collection.mutable.HashMap[Any, collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]]()
+    def cacheEntity(sample: Any, primaryKey: Any, entity: Option[KeyedEntity[_]]) = {
+      val cachedTableMap = cachedEntityData.filterKeys(c => c == sample).map(_._2).headOption
+      val tableMap =
+        cachedTableMap.fold({
+          val newMap = collection.mutable.HashMap[Any, Option[KeyedEntity[_]]]()
+          cachedEntityData += ((sample, newMap))
+
+          newMap
+        })(a => a)
+
+      tableMap += ((primaryKey, entity))
+    }
+
+    def getCachedEntity(sample: Any, primaryKey: Any): Option[KeyedEntity[_]] = {
+      val cachedValue = cachedEntityData.filterKeys(c => c == sample).headOption.flatMap(_._2.filterKeys(_ == primaryKey).headOption.map(_._2))
+
+      cachedValue.getOrElse(None)
+    }
+
+    val startTime = System.nanoTime()
+
+    val valueMap = Iterator.from(1).takeWhile(_ => rs.next).map(p => {
+      def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], collection: List[IncludeRowData], isHead: Boolean = false):
+      List[IncludeRowData] = {
+
+        val value =
+          if(!isHead){
+            val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
+            val sample = left.subQueryable.sample
+
+            val value = getCachedEntity(sample, primaryKey).fold({
+              val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+              cacheEntity(sample, primaryKey, keyedEntity)
+              keyedEntity
+            })(e =>
+              Option(e))
+
+            if(left.includePathRelation.nonEmpty && parent.nonEmpty) {
+              val includeRelation = left.includePathRelation.get
+              includeRelation match {
+                case x: OneToManyIncludePathRelation[_, _] => {
+                  val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parent.get)
+                  relationship.add(value)
+                }
+                case y: ManyToOneIncludePathRelation[_, _] => {
+                  val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parent.get)
+                  relationship.fill(value)
+                }
+              }
+            }
+
+            value
+          }
+          else {
+            val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
+            val sample = left.subQueryable.sample
+
+            getCachedEntity(sample, primaryKey).fold({
+              val keyedEntity = Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[R]])
+              cacheEntity(sample, primaryKey, keyedEntity)
+              keyedEntity
+            })(e =>
+              Option(e).asInstanceOf[Option[KeyedEntity[R]]])
+          }
+
+        val tempSeq = collection ++ List(IncludeRowData(value, parent, left.includePathRelation))
+        val newCollection = left.relations.flatMap(walkAndRead(_, value, tempSeq)).toList
+
+        newCollection ++ tempSeq
+      }
+
+      val row = walkAndRead(joinedIncludes.get, None, List(), true)
+      row
+    }
+    ).toList
+    val endTime = System.nanoTime()
+    val elapsed = endTime - startTime
+    println(s"walkAndRead: $elapsed ns")
+    val cachedGroupColumn = collection.mutable.HashMap[Any, Option[Map[GroupedData, Iterable[IncludeRowData]]]]()
+    val canonicalRowData: collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]] = collection.mutable.HashMap[Class[_], collection.mutable.HashMap[Any, KeyedEntity[_]]]()
+
+    val columnLayoutStartTime = System.nanoTime()
+    val columnLayout = walkAndGetColumnLayout(joinedIncludes.get, List())
+    val columnLayoutEndTime = System.nanoTime()
+    val columnLayoutElapsed = columnLayoutEndTime - columnLayoutStartTime
+    println(s"walkAndGetColumnLayout: $columnLayoutElapsed ns")
+
+    private val entityList = joinedIncludes.fold(
+      List[R]()
+    )(ji => {
+      val sample = ji.subQueryable.sample
+      cachedEntityData.filterKeys(k => k == sample).map(_._2).flatMap(_.values).flatMap(_.asInstanceOf[Option[R]]).toList
     })
+
+    private val iterator = entityList.iterator
+
+    def hasNext: Boolean = iterator.hasNext
+
+    def next(): R = iterator.next()
+
+    def close(): Unit = {
+      stmt.close
+      rs.close
+    }
   }
 
   override def toString = dumpAst + "\n" + _genStatement(true)
@@ -676,6 +577,4 @@ abstract class AbstractQuery[R](
   def except(q: Query[R]): Query[R] = createUnion("Except", q)
 
   def exceptAll(q: Query[R]): Query[R] = createUnion("Except All", q)
-
-  private def nop() = {}
 }
