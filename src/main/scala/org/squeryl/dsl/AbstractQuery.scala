@@ -408,11 +408,15 @@ abstract class AbstractQuery[R](
 
   def iterator = new Iterator[R] with Closeable {
 
+    val iteratorStartTime = System.nanoTime()
     val sw = new StatementWriter(false, _dbAdapter)
     ast.write(sw)
     val s = Session.currentSession
     val beforeQueryExecute = System.currentTimeMillis
+    val queryStartTime = System.nanoTime()
     val (rs, stmt) = _dbAdapter.executeQuery(s, sw)
+    println(s"stmt: ${stmt}")
+    println(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
 
     lazy val statEx = new StatementInvocationEvent(definitionSite.get, beforeQueryExecute, System.currentTimeMillis, -1, sw.statement)
 
@@ -426,6 +430,8 @@ abstract class AbstractQuery[R](
     var _hasNext = false;
 
     var rowCount = 0
+
+    println(s"Beginning of iteration (pre include iterable): ${System.nanoTime() - iteratorStartTime} ns")
 
     val includeIterableStartTime = System.nanoTime()
     val includeIterable =
