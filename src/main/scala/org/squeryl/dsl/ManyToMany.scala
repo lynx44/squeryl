@@ -62,7 +62,6 @@ class IncludableOneToMany[M](rel: () => OneToMany[M]) extends StatefulOneToMany[
   }
 
   override def refresh: Unit = {
-    println("refresh called")
     super.refresh
     isFilled = true
   }
@@ -121,7 +120,6 @@ class IncludableManyToOne[O](rel: () => ManyToOne[O]) extends StatefulManyToOne[
   }
 
   override def refresh: Unit = {
-    println("refresh called")
     super.refresh
     isFilled = true
   }
