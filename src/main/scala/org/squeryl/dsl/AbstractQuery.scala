@@ -495,14 +495,24 @@ abstract class AbstractQuery[R](
 //          v
 //        }
 
-        val children = includePath.relations.flatMap(r => {
-          readRow(r, Some(includePath)).map((r, _))
+        val children = includePath.relations.map(r => {
+          (r, readRow(r, Some(includePath)))
         })
 
         readPkStopwatch.start
-        val primaryKey = children.headOption.fold({
-          includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
-        })(child => child._2.parentPk)
+        val primaryKey = children.flatMap(_._2).headOption.fold({
+          val key = includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
+          if(key.isEmpty) {
+            val sampleId = includePath.subQueryable.sample.asInstanceOf[Option[KeyedEntity[_]]].get.id
+            if(sampleId.isInstanceOf[CompositeKey]) {
+              includePath.subQueryable.resultSetMapper.readFields(sampleId.asInstanceOf[CompositeKey]._fields, rs)
+            } else {
+              key
+            }
+          } else {
+            key
+          }
+        })(child => child.parentPk)
         readPkStopwatch.stop
 
         val keyedEntity = if(primaryKey.nonEmpty) {
@@ -516,8 +526,8 @@ abstract class AbstractQuery[R](
             if(parentIncludePath.nonEmpty) {
               materializeCounter.increment
               materializeStopwatch.measure(
-              includePath.subQueryable.give(rs)).asInstanceOf[Option[KeyedEntity[_]]]
-
+              includePath.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+              )
             } else {
               materializeCounter.increment
               materializeParentStopwatch.measure(
@@ -540,11 +550,11 @@ abstract class AbstractQuery[R](
               includeChildRelation match {
                 case x: OneToManyIncludePathRelation[_, _] => {
                   val relationship = includeChildRelation.relationshipAccessor[StatefulOneToMany[Any]](keyedEntity.get)
-                  relationship.add(Some(c._2.entity))
+                  relationship.add(c._2.map(_.entity))
                 }
                 case y: ManyToOneIncludePathRelation[_, _] => {
                   val relationship = includeChildRelation.relationshipAccessor[StatefulManyToOne[Any]](keyedEntity.get)
-                  relationship.fill(Some(c._2.entity))
+                  relationship.fill(c._2.map(_.entity))
                 }
               }
             })

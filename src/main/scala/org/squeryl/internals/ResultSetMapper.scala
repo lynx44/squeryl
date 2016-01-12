@@ -259,6 +259,10 @@ class ResultSetMapper extends ResultSetUtils {
   def readPrimaryKey(resultSet: ResultSet): Seq[Any] = {
     primaryKeyFieldMappers.map(m => resultSet.getObject(m.index))
   }
+
+  def readFields(fieldMetaData: Seq[FieldMetaData], resultSet: ResultSet): Seq[Any] = {
+    _fieldMapper.filter(c => fieldMetaData.contains(c.fieldMetaData)).map(m => resultSet.getObject(m.index))
+  }
 }
 
 class YieldValuePusher(val index: Int, val selectElement: SelectElement, mapper: OutMapper[_])  {
