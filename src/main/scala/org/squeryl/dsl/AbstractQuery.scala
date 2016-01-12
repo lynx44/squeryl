@@ -476,8 +476,77 @@ abstract class AbstractQuery[R](
         datas
       }
 
-      val row = walkAndRead(joinedIncludes.get, None, true)
-      row
+      case class ReadRow(entity: KeyedEntity[_], parentPk: Seq[Any])
+      def readRow(includePath: JoinedIncludePath, parentIncludePath: Option[JoinedIncludePath]): Option[ReadRow] = {
+//        val sample = includePath.subQueryable.sample
+//
+//        val entity = {
+//          val v = entityCache.getCachedEntity(sample, primaryKey)
+//          v
+//        }
+
+        val children = includePath.relations.flatMap(r => {
+          readRow(r, Some(includePath)).map((r, _))
+        })
+
+        val primaryKey = children.headOption.fold({
+          includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
+        })(child => child._2.parentPk)
+
+        val cachedEntity = entityCache.getCachedEntity(includePath.subQueryable.sample, primaryKey)
+
+        val keyedEntity =
+          if(cachedEntity.nonEmpty) {
+            cachedEntity
+          } else {
+            val materializedEntity =
+            if(parentIncludePath.nonEmpty) {
+              includePath.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+            } else {
+              Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[R]])
+            }
+
+            entityCache.cacheEntity(includePath.subQueryable.sample, primaryKey, materializedEntity)
+
+            materializedEntity
+          }
+        
+        if(keyedEntity.nonEmpty) {
+          children.foreach(c => {
+            c._1.includePathRelation.map(includeChildRelation => {
+              includeChildRelation match {
+                case x: OneToManyIncludePathRelation[_, _] => {
+                  val relationship = includeChildRelation.relationshipAccessor[StatefulOneToMany[Any]](keyedEntity.get)
+                  relationship.add(Some(c._2.entity))
+                }
+                case y: ManyToOneIncludePathRelation[_, _] => {
+                  val relationship = includeChildRelation.relationshipAccessor[StatefulManyToOne[Any]](keyedEntity.get)
+                  relationship.fill(Some(c._2.entity))
+                }
+              }
+            })
+          })
+        }
+
+        val p = parentIncludePath.map(parentInclude =>
+          includePath.includePathRelation.head.equalityExpressionAccessor(parentInclude.subQueryable.sample, includePath.subQueryable.sample).right._fieldMetaData)
+
+        keyedEntity.map(k => ReadRow(k, p.map(_.get(k)).toList))
+
+//        entity.fold({
+//          val keyedEntity = includePath.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+//          entityCache.cacheEntity(sample, primaryKey, keyedEntity)
+//          keyedEntity
+//        })(e => e)
+      }
+
+      def readEntity(primaryKey: Seq[Any], includePath: JoinedIncludePath): Option[KeyedEntity[_]] = {
+        includePath.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
+      }
+
+      readRow(joinedIncludes.get, None)
+//      val row = walkAndRead(joinedIncludes.get, None, true)
+//      row
     }
     ).toList
 

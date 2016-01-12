@@ -256,7 +256,7 @@ class ResultSetMapper extends ResultSetUtils {
     }
   }
 
-  def readPrimaryKey(resultSet: ResultSet): Seq[AnyRef] = {
+  def readPrimaryKey(resultSet: ResultSet): Seq[Any] = {
     primaryKeyFieldMappers.map(m => resultSet.getObject(m.index))
   }
 }
