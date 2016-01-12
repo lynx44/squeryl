@@ -500,7 +500,7 @@ abstract class AbstractQuery[R](
         })
 
         readPkStopwatch.start
-        val primaryKey = children.flatMap(_._2).headOption.fold({
+        val primaryKey = children.filter(_._1.includePathRelation.map(_.isInstanceOf[OneToManyIncludePathRelation[_, _]]).getOrElse(false)).flatMap(_._2).headOption.fold({
           val key = includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
           if(key.isEmpty) {
             val sampleId = includePath.subQueryable.sample.asInstanceOf[Option[KeyedEntity[_]]].get.id
@@ -583,7 +583,13 @@ abstract class AbstractQuery[R](
 
       def getParentPKFieldMetadata(includePath: JoinedIncludePath, parentSample: Any, currentSample: Any): FieldMetaData = {
         parentPkMetadataFieldPath.get(includePath.hashCode()).fold({
-          val fmd = includePath.includePathRelation.head.equalityExpressionAccessor(parentSample, currentSample).right._fieldMetaData
+          val accessor = includePath.includePathRelation.head.equalityExpressionAccessor(parentSample, currentSample)
+          val fmd = if(includePath.includePathRelation.map(_.isInstanceOf[OneToManyIncludePathRelation[_, _]]).getOrElse(false)) {
+            accessor.right._fieldMetaData
+          } else {
+            accessor.left._fieldMetaData
+          }
+
           parentPkMetadataFieldPath += ((includePath.hashCode(), fmd))
           fmd
         })(fmd => fmd)

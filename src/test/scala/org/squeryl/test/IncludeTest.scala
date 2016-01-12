@@ -88,139 +88,139 @@ abstract class IncludeTest extends DbTestBase {
 
   // Single Include tests
 
-//  test("include oneToMany - many relation with one child") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//  }
-//
-//  test("include oneToMany - many relation with two children") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c1 = IncludeSchema.employees.insert(new Employee("child1", p.id))
-//      val c2 = IncludeSchema.employees.insert(new Employee("child2", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//    }
-//
-//    assert(data.employees.size == 2)
-//  }
-//
-//  test("include oneToMany - many relation with two parents and two children") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p1 = IncludeSchema.managers.insert(new Manager("person1"))
-//      val p2 = IncludeSchema.managers.insert(new Manager("person2"))
-//      val c1 = IncludeSchema.employees.insert(new Employee("child1", p1.id))
-//      val c2 = IncludeSchema.employees.insert(new Employee("child2", p2.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
-//    }
-//
-//    assert(data.size == 2)
-//    assert(data.filter(p => p.name == "person1").head.employees.head.name == "child1")
-//    assert(data.filter(p => p.name == "person2").head.employees.head.name == "child2")
-//  }
-//
-//  test("include oneToMany - many relation with no data returns empty") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
-//    }
-//
-//    assert(data.size == 0)
-//  }
-//
-//  test("include oneToMany - can iterate included property multiple times") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//    assert(data.employees.size == 1)
-//  }
+  test("include oneToMany - many relation with one child") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
 
-//  test("include oneToMany - many relation with no children returns empty") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//    }
-//
-//    assert(data.employees.size == 0)
-//  }
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
 
-//  test("include oneToMany - can delete children") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//
-//      data.employees.deleteAll
-//
-//      assert(data.employees.size == 0)
-//    }
-//  }
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+    }
 
-//  test("include oneToMany - can associate children") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = new Employee("child", p.id)
-//
-//      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
-//
-//      data.employees.associate(c)
-//
-//      assert(data.employees.size == 1)
-//    }
-//  }
+    assert(data.employees.size == 1)
+  }
+
+  test("include oneToMany - many relation with two children") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c1 = IncludeSchema.employees.insert(new Employee("child1", p.id))
+      val c2 = IncludeSchema.employees.insert(new Employee("child2", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+    }
+
+    assert(data.employees.size == 2)
+  }
+
+  test("include oneToMany - many relation with two parents and two children") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p1 = IncludeSchema.managers.insert(new Manager("person1"))
+      val p2 = IncludeSchema.managers.insert(new Manager("person2"))
+      val c1 = IncludeSchema.employees.insert(new Employee("child1", p1.id))
+      val c2 = IncludeSchema.employees.insert(new Employee("child2", p2.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
+    }
+
+    assert(data.size == 2)
+    assert(data.filter(p => p.name == "person1").head.employees.head.name == "child1")
+    assert(data.filter(p => p.name == "person2").head.employees.head.name == "child2")
+  }
+
+  test("include oneToMany - many relation with no data returns empty") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).toList
+    }
+
+    assert(data.size == 0)
+  }
+
+  test("include oneToMany - can iterate included property multiple times") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.employees.size == 1)
+  }
+
+  test("include oneToMany - many relation with no children returns empty") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+    }
+
+    assert(data.employees.size == 0)
+  }
+
+  test("include oneToMany - can delete children") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+
+      data.employees.deleteAll
+
+      assert(data.employees.size == 0)
+    }
+  }
+
+  test("include oneToMany - can associate children") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = new Employee("child", p.id)
+
+      val data = from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees))).head
+
+      data.employees.associate(c)
+
+      assert(data.employees.size == 1)
+    }
+  }
 
 //  test("include oneToMany - can assign children") {
 //    implicit val schema = IncludeSchema
@@ -238,86 +238,86 @@ abstract class IncludeTest extends DbTestBase {
 //    data.employees.assign(c)
 //  }
 
-//  test("include oneToMany - with no data returns empty size") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val m1 = IncludeSchema.managers.insert(new Manager("manager1"))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_-*(_.employees))).head
-//    }
-//
-//    assert(data.employees.size == 0)
-//  }
+  test("include oneToMany - with no data returns empty size") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m1 = IncludeSchema.managers.insert(new Manager("manager1"))
+
+      from(IncludeSchema.managers)(p => select(p) include(_-*(_.employees))).head
+    }
+
+    assert(data.employees.size == 0)
+  }
 
 //   end Single Include tests
 
   // begin Nested Include tests
 
-//  test("include oneToMany - can retrieve two adjacent properties") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val m = IncludeSchema.managers.insert(new Manager("person"))
-//      val e = IncludeSchema.employees.insert(new Employee("child", m.id))
-//      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
-//
-//      from(IncludeSchema.managers)(p => select(p)
-//      include(_.->>(_.-*(_.employees), _.-*(_.responsibilities)))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//    assert(data.responsibilities.size == 1)
-//  }
-//
-//  test("include oneToMany - can retrieve two nested properties") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val m = IncludeSchema.managers.insert(new Manager("person"))
-//      val e = IncludeSchema.employees.insert(new Employee("child", m.id))
-//      val r = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
-//
-//      from(IncludeSchema.managers)(p => select(p)
-//      include(_.-*(_.employees).-*(_.benefits))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//    assert(data.employees.head.benefits.size == 1)
-//  }
-//
-//  test("include oneToMany - can retrieve two nested properties with correct assignments") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val m = IncludeSchema.managers.insert(new Manager("manager"))
-//      val e1 = IncludeSchema.employees.insert(new Employee("employee1", m.id))
-//      val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
-//      val e2 = IncludeSchema.employees.insert(new Employee("employee2", m.id))
-//      val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
-//
-//      from(IncludeSchema.managers)(p => select(p)
-//      include(_.-*(_.employees).-*(_.benefits))).head
-//    }
-//
-//    assert(data.employees.size == 2)
-//    assert(data.employees.head.benefits.size == 1)
-//    assert(data.employees.filter(_.name == "employee1").head.benefits.head.name == "benefit1")
-//    assert(data.employees.last.benefits.size == 1)
-//    assert(data.employees.filter(_.name == "employee2").head.benefits.head.name == "benefit2")
-//  }
+  test("include oneToMany - can retrieve two adjacent properties") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("child", m.id))
+      val r = IncludeSchema.responsibilities.insert(new Responsibility("responsibility", m.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(_.->>(_.-*(_.employees), _.-*(_.responsibilities)))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.responsibilities.size == 1)
+  }
+
+  test("include oneToMany - can retrieve two nested properties") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("child", m.id))
+      val r = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(_.-*(_.employees).-*(_.benefits))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.employees.head.benefits.size == 1)
+  }
+
+  test("include oneToMany - can retrieve two nested properties with correct assignments") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("manager"))
+      val e1 = IncludeSchema.employees.insert(new Employee("employee1", m.id))
+      val b1 = IncludeSchema.benefits.insert(new Benefit("benefit1", e1.id))
+      val e2 = IncludeSchema.employees.insert(new Employee("employee2", m.id))
+      val b2 = IncludeSchema.benefits.insert(new Benefit("benefit2", e2.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(_.-*(_.employees).-*(_.benefits))).head
+    }
+
+    assert(data.employees.size == 2)
+    assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.filter(_.name == "employee1").head.benefits.head.name == "benefit1")
+    assert(data.employees.last.benefits.size == 1)
+    assert(data.employees.filter(_.name == "employee2").head.benefits.head.name == "benefit2")
+  }
 
   test("include oneToMany - can retrieve nested properties on adjacent properties with correct assignments") {
     implicit val schema = IncludeSchema
@@ -342,34 +342,34 @@ abstract class IncludeTest extends DbTestBase {
     assert(data.responsibilities.head.types.size == 1)
   }
 
-//  test("include oneToMany - can retrieve nested properties with adjacent properties") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val m = IncludeSchema.managers.insert(new Manager("person"))
-//      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
-//      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
-//      val r = IncludeSchema.categories.insert(new Category("category", b.id))
-//      val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
-//
-//      from(IncludeSchema.managers)(p => select(p)
-//      include(_.->>(_.-*(_.employees).-*(_.benefits).->>(
-//                                                          _.-*(_.categories), _.-*(_.expenses)),
-//                    _.-*(_.responsibilities).-*(_.types)))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//    assert(data.employees.head.name == "employee")
-//    assert(data.employees.head.benefits.size == 1)
-//    assert(data.employees.head.benefits.head.name == "benefit")
-//    assert(data.employees.head.benefits.head.categories.size == 1)
-//    assert(data.employees.head.benefits.head.categories.head.name == "category")
-//    assert(data.employees.head.benefits.head.expenses.size == 1)
-//    assert(data.employees.head.benefits.head.expenses.head.name == "expense")
-//  }
+  test("include oneToMany - can retrieve nested properties with adjacent properties") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val m = IncludeSchema.managers.insert(new Manager("person"))
+      val e = IncludeSchema.employees.insert(new Employee("employee", m.id))
+      val b = IncludeSchema.benefits.insert(new Benefit("benefit", e.id))
+      val r = IncludeSchema.categories.insert(new Category("category", b.id))
+      val ex = IncludeSchema.expenses.insert(new Expense("expense", b.id))
+
+      from(IncludeSchema.managers)(p => select(p)
+      include(_.->>(_.-*(_.employees).-*(_.benefits).->>(
+                                                          _.-*(_.categories), _.-*(_.expenses)),
+                    _.-*(_.responsibilities).-*(_.types)))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(data.employees.head.name == "employee")
+    assert(data.employees.head.benefits.size == 1)
+    assert(data.employees.head.benefits.head.name == "benefit")
+    assert(data.employees.head.benefits.head.categories.size == 1)
+    assert(data.employees.head.benefits.head.categories.head.name == "category")
+    assert(data.employees.head.benefits.head.expenses.size == 1)
+    assert(data.employees.head.benefits.head.expenses.head.name == "expense")
+  }
 
   // end Nested Include tests
 
@@ -474,110 +474,110 @@ abstract class IncludeTest extends DbTestBase {
 
   // begin inhibitWhen tests
 
-//  test("inhibitWhen - direct descendant") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees).inhibitWhen(true))).head
-//    }
-//
-//    assert(Try(data.employees.size) match {
-//      case Success(_) => false
-//      case Failure(_:java.lang.IllegalStateException) => true
-//    }, "Expected IllegalStateException when accessing inhibited child property")
-//  }
-//
-//  test("inhibitWhen - nested descendant") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees).-*(_.benefits).inhibitWhen(true))).head
-//    }
-//
-//    assert(data.employees.size == 1)
-//    assert(Try(data.employees.head.benefits.size) match {
-//      case Success(_) => false
-//      case Failure(_:java.lang.IllegalStateException) => true
-//    }, "Expected IllegalStateException when accessing inhibited child property")
-//  }
-//
-//  test("inhibitWhen - adjacent descendants") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.->>(_.-*(_.employees), _.-*(_.responsibilities)).inhibitWhen(true))).head
-//    }
-//
-//    assert(Try(data.employees.size) match {
-//      case Success(_) => false
-//      case Failure(_:java.lang.IllegalStateException) => true
-//    }, "Expected IllegalStateException when accessing inhibited child property")
-//
-//    assert(Try(data.responsibilities.size) match {
-//      case Success(_) => false
-//      case Failure(_:java.lang.IllegalStateException) => true
-//    }, "Expected IllegalStateException when accessing inhibited child property")
-//  }
+  test("inhibitWhen - direct descendant") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
 
-//  test("inhibitWhen - adjacent descendants inner inhibited") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      from(IncludeSchema.managers)(p => select(p) include(_.->>(_.-*(_.employees).inhibitWhen(true), _.-*(_.responsibilities).inhibitWhen(false)))).head
-//    }
-//
-//    assert(Try(data.employees.size) match {
-//      case Success(_) => false
-//      case Failure(_:java.lang.IllegalStateException) => true
-//    }, "Expected IllegalStateException when accessing inhibited child property")
-//
-//    assert(data.responsibilities.size == 0)
-//  }
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees).inhibitWhen(true))).head
+    }
+
+    assert(Try(data.employees.size) match {
+      case Success(_) => false
+      case Failure(_:java.lang.IllegalStateException) => true
+    }, "Expected IllegalStateException when accessing inhibited child property")
+  }
+
+  test("inhibitWhen - nested descendant") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.-*(_.employees).-*(_.benefits).inhibitWhen(true))).head
+    }
+
+    assert(data.employees.size == 1)
+    assert(Try(data.employees.head.benefits.size) match {
+      case Success(_) => false
+      case Failure(_:java.lang.IllegalStateException) => true
+    }, "Expected IllegalStateException when accessing inhibited child property")
+  }
+
+  test("inhibitWhen - adjacent descendants") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.->>(_.-*(_.employees), _.-*(_.responsibilities)).inhibitWhen(true))).head
+    }
+
+    assert(Try(data.employees.size) match {
+      case Success(_) => false
+      case Failure(_:java.lang.IllegalStateException) => true
+    }, "Expected IllegalStateException when accessing inhibited child property")
+
+    assert(Try(data.responsibilities.size) match {
+      case Success(_) => false
+      case Failure(_:java.lang.IllegalStateException) => true
+    }, "Expected IllegalStateException when accessing inhibited child property")
+  }
+
+  test("inhibitWhen - adjacent descendants inner inhibited") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      from(IncludeSchema.managers)(p => select(p) include(_.->>(_.-*(_.employees).inhibitWhen(true), _.-*(_.responsibilities).inhibitWhen(false)))).head
+    }
+
+    assert(Try(data.employees.size) match {
+      case Success(_) => false
+      case Failure(_:java.lang.IllegalStateException) => true
+    }, "Expected IllegalStateException when accessing inhibited child property")
+
+    assert(data.responsibilities.size == 0)
+  }
 
   // end inhibitWhen tests
 
-//  test("join") {
-//    implicit val schema = IncludeSchema
-//    transaction {
-//      IncludeSchema.reset
-//    }
-//
-//    val data = transaction {
-//      val p = IncludeSchema.managers.insert(new Manager("person"))
-//      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
-//
-//      join(IncludeSchema.managers, IncludeSchema.employees)((m, e) =>
-//        select(m)
-//        include(_.-*(_.responsibilities))
-//        on(m.id === e.managerId)
-//      ).head
-//    }
-//
-//    assert(data.responsibilities.size == 0)
-//  }
+  test("join") {
+    implicit val schema = IncludeSchema
+    transaction {
+      IncludeSchema.reset
+    }
+
+    val data = transaction {
+      val p = IncludeSchema.managers.insert(new Manager("person"))
+      val c = IncludeSchema.employees.insert(new Employee("child", p.id))
+
+      join(IncludeSchema.managers, IncludeSchema.employees)((m, e) =>
+        select(m)
+        include(_.-*(_.responsibilities))
+        on(m.id === e.managerId)
+      ).head
+    }
+
+    assert(data.responsibilities.size == 0)
+  }
 }
 
