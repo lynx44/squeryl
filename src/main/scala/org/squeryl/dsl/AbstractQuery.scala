@@ -183,7 +183,7 @@ abstract class AbstractQuery[R](
       val subQueryableAndJoinClause = walkAndCollect(null, joinedIncludes.get, List()).reverse
       val endTime = System.nanoTime()
       val elapsed = endTime - startTime
-      println(s"subqueryable join clause: $elapsed ns")
+      output(s"subqueryable join clause: $elapsed ns")
       subQueryables ++ subQueryableAndJoinClause
     } else {
       subQueryables
@@ -301,7 +301,7 @@ abstract class AbstractQuery[R](
     val beforeQueryExecute = System.currentTimeMillis
     val queryStartTime = System.nanoTime()
     val (rs, stmt) = _dbAdapter.executeQuery(s, sw)
-    println(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
+    output(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
 
     lazy val statEx = new StatementInvocationEvent(definitionSite.get, beforeQueryExecute, System.currentTimeMillis, -1, sw.statement)
 
@@ -366,7 +366,7 @@ abstract class AbstractQuery[R](
     val beforeQueryExecute = System.currentTimeMillis
     val queryStartTime = System.nanoTime()
     val (rs, stmt) = _dbAdapter.executeQuery(s, sw)
-    println(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
+    output(s"dbAdapter.executeQuery: ${System.nanoTime() - queryStartTime} ns")
 
     lazy val statEx = new StatementInvocationEvent(definitionSite.get, beforeQueryExecute, System.currentTimeMillis, -1, sw.statement)
 
@@ -376,18 +376,18 @@ abstract class AbstractQuery[R](
     s._addStatement(stmt) // if the iteration doesn't get completed, we must hang on to the statement to clean it up at session end.
     s._addResultSet(rs) // same for the result set
 
-    println(s"sql total elapsed: ${System.nanoTime() - startTime} ns")
+    output(s"sql total elapsed: ${System.nanoTime() - startTime} ns")
 
     val cachedReadStopwatch = new Stopwatch()
     class EntityCache {
 
-      val cachedEntityData: java.util.HashMap[Any, collection.mutable.LongMap[Option[KeyedEntity[_]]]] = new java.util.HashMap[Any, collection.mutable.LongMap[Option[KeyedEntity[_]]]]()
-      def cacheEntity(sample: Any, primaryKey: Any, entity: Option[KeyedEntity[_]]) = {
-        val cachedTableMap = Option(cachedEntityData.get(sample))
+      val cachedEntityData: collection.mutable.LongMap[collection.mutable.LongMap[Option[KeyedEntity[_]]]] = new collection.mutable.LongMap[collection.mutable.LongMap[Option[KeyedEntity[_]]]]()
+      def cacheEntity(includePath: JoinedIncludePath, primaryKey: Any, entity: Option[KeyedEntity[_]]) = {
+        val cachedTableMap = cachedEntityData.get(includePath.hashCode())
         val tableMap =
           cachedTableMap.fold({
             val newMap = collection.mutable.LongMap[Option[KeyedEntity[_]]]()
-            cachedEntityData.put(sample, newMap)
+            cachedEntityData.put(includePath.hashCode(), newMap)
 
             newMap
           })(a => a)
@@ -396,12 +396,13 @@ abstract class AbstractQuery[R](
       }
 
       private val defaultKeyEntityMap = collection.mutable.LongMap[Option[KeyedEntity[_]]]()
-      def getCachedEntity(sample: Any, primaryKey: Any): Option[KeyedEntity[_]] = {
+      def getCachedEntity(includePath: JoinedIncludePath, primaryKey: Any): Option[KeyedEntity[_]] = {
         cachedReadStopwatch.start
         val options = {
-          val e1 = cachedEntityData.get(sample)
+          val e1 = cachedEntityData.get(includePath.hashCode())
 
-          if(e1 == null) defaultKeyEntityMap else e1
+//          if(e1 == null) defaultKeyEntityMap else e1
+          e1.getOrElse(defaultKeyEntityMap)
         }
         val value = {
           val e2 = options.getOrElse(primaryKey.hashCode(), None)
@@ -422,78 +423,15 @@ abstract class AbstractQuery[R](
     val parentPkReaderStopwatch = new Stopwatch()
     val materializeStopwatch = new Stopwatch()
     val materializeParentStopwatch = new Stopwatch()
+    val getEntityStopwatch = new Stopwatch()
     val parentPkMetadataFieldPath = collection.mutable.LongMap[FieldMetaData]()
     val materializeCounter = new Counter()
     val cacheHitCounter = new Counter()
     readStopwatch.start
     Iterator.from(1).takeWhile(_ => rs.next).foreach(p => {
-//      def walkAndRead(left: JoinedIncludePath, parent: Option[KeyedEntity[_]], isHead: Boolean = false):
-//      Seq[IncludeRowData] = {
-//
-//        val value =
-//          if(!isHead){
-//            val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
-//            val sample = left.subQueryable.sample
-//
-//            val entity = {
-//              val v = entityCache.getCachedEntity(sample, primaryKey)
-//              v
-//            }
-//
-//            val entityValue = entity.fold({
-//              val keyedEntity = left.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-//              entityCache.cacheEntity(sample, primaryKey, keyedEntity)
-//              keyedEntity
-//            })(e =>
-//              Option(e))
-//
-//            if(left.includePathRelation.nonEmpty && parent.nonEmpty) {
-//              val includeRelation = left.includePathRelation.get
-//              includeRelation match {
-//                case x: OneToManyIncludePathRelation[_, _] => {
-//                  val relationship = includeRelation.relationshipAccessor[StatefulOneToMany[Any]](parent.get)
-//                  relationship.add(entityValue)
-//                }
-//                case y: ManyToOneIncludePathRelation[_, _] => {
-//                  val relationship = includeRelation.relationshipAccessor[StatefulManyToOne[Any]](parent.get)
-//                  relationship.fill(entityValue)
-//                }
-//              }
-//            }
-//
-//            entityValue
-//          }
-//          else {
-//            val primaryKey = left.subQueryable.resultSetMapper.readPrimaryKey(rs)
-//            val sample = left.subQueryable.sample
-//
-//            val entity = {
-//              val v = entityCache.getCachedEntity(sample, primaryKey)
-//              v
-//            }
-//
-//            entity.fold({
-//              val keyedEntity = Option(give(resultSetMapper, rs).asInstanceOf[KeyedEntity[R]])
-//              entityCache.cacheEntity(sample, primaryKey, keyedEntity)
-//              keyedEntity
-//            })(e =>
-//              Option(e).asInstanceOf[Option[KeyedEntity[R]]])
-//          }
-//
-//        val newCollection = left.relations.flatMap(walkAndRead(_, value))
-//
-//        val datas = newCollection
-//        datas
-//      }
 
       case class ReadRow(entity: KeyedEntity[_], parentPk: Seq[Any])
       def readRow(includePath: JoinedIncludePath, parentIncludePath: Option[JoinedIncludePath]): Option[ReadRow] = {
-//        val sample = includePath.subQueryable.sample
-//
-//        val entity = {
-//          val v = entityCache.getCachedEntity(sample, primaryKey)
-//          v
-//        }
 
         val children = includePath.relations.map(r => {
           (r, readRow(r, Some(includePath)))
@@ -515,8 +453,9 @@ abstract class AbstractQuery[R](
         })(child => child.parentPk)
         readPkStopwatch.stop
 
+        getEntityStopwatch.start
         val keyedEntity = if(primaryKey.nonEmpty) {
-          val cachedEntity = entityCache.getCachedEntity(includePath.subQueryable.sample, primaryKey)
+          val cachedEntity = entityCache.getCachedEntity(includePath, primaryKey)
 
           if(cachedEntity.nonEmpty) {
             cacheHitCounter.increment
@@ -535,13 +474,14 @@ abstract class AbstractQuery[R](
               )
             }
 
-            entityCache.cacheEntity(includePath.subQueryable.sample, primaryKey, materializedEntity)
+            entityCache.cacheEntity(includePath, primaryKey, materializedEntity)
 
             materializedEntity
           }
         } else {
           None
         }
+        getEntityStopwatch.stop
 
         populateRelationsStopwatch.start
         if(keyedEntity.nonEmpty) {
@@ -573,12 +513,6 @@ abstract class AbstractQuery[R](
           parentPkReaderStopwatch.stop
           ReadRow(entity, pk.toList)
         })
-
-//        entity.fold({
-//          val keyedEntity = includePath.subQueryable.give(rs).asInstanceOf[Option[KeyedEntity[_]]]
-//          entityCache.cacheEntity(sample, primaryKey, keyedEntity)
-//          keyedEntity
-//        })(e => e)
       }
 
       def getParentPKFieldMetadata(includePath: JoinedIncludePath, parentSample: Any, currentSample: Any): FieldMetaData = {
@@ -596,33 +530,39 @@ abstract class AbstractQuery[R](
       }
 
       readRow(joinedIncludes.get, None)
-    }
-    )
+    })
 
     readStopwatch.stop
 
-    println(s"materializeCounter: ${materializeCounter.count}")
-    println(s"cacheHitCounter: ${cacheHitCounter.count}")
-    println(s"readPkStopwatch: ${readPkStopwatch.elapsed} ns")
-    println(s"materializeStopwatch: ${materializeStopwatch.elapsed} ns")
-    println(s"materializeParentStopwatch: ${materializeParentStopwatch.elapsed} ns")
-    println(s"populateRelationsStopwatch: ${populateRelationsStopwatch.elapsed} ns")
-    println(s"getFieldMetadataStopwatch: ${getFieldMetadataStopwatch.elapsed} ns")
-    println(s"parentPkReaderStopwatch: ${parentPkReaderStopwatch.elapsed} ns")
+    output(s"materializeStopwatch: ${materializeStopwatch.elapsed} ns")
+    output(s"materializeParentStopwatch: ${materializeParentStopwatch.elapsed} ns")
+    output(s"materializeCounter: ${materializeCounter.count}")
+    output(s"cachedReadStopwatch: ${cachedReadStopwatch.elapsed} ns")
+    output(s"cacheHitCounter: ${cacheHitCounter.count}")
+    output()
 
-    println(s"cachedReadStopwatch: ${cachedReadStopwatch.elapsed} ns")
-    println(s"walkAndRead: ${readStopwatch.elapsed} ns")
-    println(s"walkAndRead total elapsed: ${System.nanoTime() - startTime} ns")
+    output(s"readPkStopwatch: ${readPkStopwatch.elapsed} ns")
+    output(s"getEntityStopwatch: ${getEntityStopwatch.elapsed} ns")
+    output(s"populateRelationsStopwatch: ${populateRelationsStopwatch.elapsed} ns")
+    output(s"getFieldMetadataStopwatch: ${getFieldMetadataStopwatch.elapsed} ns")
+    output(s"parentPkReaderStopwatch: ${parentPkReaderStopwatch.elapsed} ns")
+
+    val topLevelStopwatches = Seq(readPkStopwatch, getEntityStopwatch, populateRelationsStopwatch, getFieldMetadataStopwatch, parentPkReaderStopwatch)
+
+    output(s"stopwatches total: ${topLevelStopwatches.map(_.elapsed).sum} ns")
+    output()
+
+    output(s"walkAndRead: ${readStopwatch.elapsed} ns")
+    output(s"walkAndRead total elapsed: ${System.nanoTime() - startTime} ns")
 
     private val entityList = joinedIncludes.fold(
       List[R]()
     )(ji => {
-      val sample = ji.subQueryable.sample
-      Option(entityCache.cachedEntityData.get(sample)).fold(List[R]())(b => b.map(_._2).flatMap(_.asInstanceOf[Option[R]]).toList)
+      entityCache.cachedEntityData.get(ji.hashCode()).fold(List[R]())(b => b.map(_._2).flatMap(_.asInstanceOf[Option[R]]).toList)
     })
 
-    println(s"entityList total count: ${entityList.length}")
-    println(s"entityList total elapsed: ${System.nanoTime() - startTime} ns")
+    output(s"entityList total count: ${entityList.length}")
+    output(s"entityList total elapsed: ${System.nanoTime() - startTime} ns")
 
     private val iterator = entityList.iterator
 
@@ -719,6 +659,10 @@ abstract class AbstractQuery[R](
   def except(q: Query[R]): Query[R] = createUnion("Except", q)
 
   def exceptAll(q: Query[R]): Query[R] = createUnion("Except All", q)
+  
+  def output(log: String = ""): Unit = {
+    println(log)
+  }
 }
 
 class Stopwatch {
