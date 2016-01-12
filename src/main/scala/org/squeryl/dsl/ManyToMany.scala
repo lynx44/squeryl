@@ -67,11 +67,6 @@ class IncludableOneToMany[M](rel: () => OneToMany[M]) extends StatefulOneToMany[
     isFilled = true
   }
 
-  override protected[squeryl] def fill(m: Iterable[M]): Unit = {
-    super.fill(m)
-    isFilled = true
-  }
-
   override protected[squeryl] def add(entity: Option[M]): Unit = {
     super.add(entity)
     isFilled = true
@@ -105,11 +100,6 @@ class StatefulOneToMany[M](val rel: () => OneToMany[M]) extends Iterable[M] {
     val r = relation.deleteAll
     _buffer.clear
     r
-  }
-  
-  protected [squeryl] def fill(m: Iterable[M]) = {
-    _buffer.clear()
-    m.foreach(_buffer.append(_))
   }
 
   protected [squeryl] def add(entity: Option[M]): Unit = {

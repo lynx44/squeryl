@@ -366,6 +366,7 @@ abstract class AbstractQuery[R](
     s._addStatement(stmt) // if the iteration doesn't get completed, we must hang on to the statement to clean it up at session end.
     s._addResultSet(rs) // same for the result set
 
+    // cache for materialized entities, so we don't have to reread entities from the result set more than once
     class EntityCache {
 
       val cachedEntityData: collection.mutable.LongMap[collection.mutable.LongMap[Option[KeyedEntity[_]]]] = new collection.mutable.LongMap[collection.mutable.LongMap[Option[KeyedEntity[_]]]]()
@@ -399,6 +400,7 @@ abstract class AbstractQuery[R](
     val entityCache = new EntityCache
 
     val parentPkMetadataFieldPath = collection.mutable.LongMap[FieldMetaData]()
+    // read all of the results in one go, currently does not support per-entity reads
     Iterator.from(1).takeWhile(_ => rs.next).foreach(p => {
 
       case class ReadRow(entity: KeyedEntity[_], parentPk: Seq[Any])
@@ -408,20 +410,29 @@ abstract class AbstractQuery[R](
           (r, readRow(r, Some(includePath)))
         })
 
-        val primaryKey = children.filter(_._1.includePathRelation.map(_.isInstanceOf[OneToManyIncludePathRelation[_, _]]).getOrElse(false)).flatMap(_._2).headOption.fold({
-          val key = includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
-          if(key.isEmpty) {
-            val sampleId = includePath.subQueryable.sample.asInstanceOf[Option[KeyedEntity[_]]].get.id
-            if(sampleId.isInstanceOf[CompositeKey]) {
-              includePath.subQueryable.resultSetMapper.readFields(sampleId.asInstanceOf[CompositeKey]._fields, rs)
+        // find the PK for this entity - either by being passed from it's child recursively (fk relationship)
+        // or by reading it from the db row
+        val primaryKey =
+          children.filter(
+            _._1.includePathRelation.map(_.isInstanceOf[OneToManyIncludePathRelation[_, _]]).getOrElse(false))
+          .flatMap(_._2).headOption.fold({
+            // read the key from the db row if it's a single field PK
+            val key = includePath.subQueryable.resultSetMapper.readPrimaryKey(rs)
+
+            // if the read did not return anything, check for a composite key
+            if(key.isEmpty) {
+              val sampleId = includePath.subQueryable.sample.asInstanceOf[Option[KeyedEntity[_]]].get.id
+              if(sampleId.isInstanceOf[CompositeKey]) {
+                includePath.subQueryable.resultSetMapper.readFields(sampleId.asInstanceOf[CompositeKey]._fields, rs)
+              } else {
+                key
+              }
             } else {
               key
             }
-          } else {
-            key
-          }
-        })(child => child.parentPk)
+          })(child => child.parentPk)
 
+        // materialize entity from db row
         val keyedEntity = if(primaryKey.nonEmpty) {
           val cachedEntity = entityCache.getCachedEntity(includePath, primaryKey)
 
@@ -443,6 +454,7 @@ abstract class AbstractQuery[R](
           None
         }
 
+        // populate relations with materialized children
         if(keyedEntity.nonEmpty) {
           children.foreach(c => {
             c._1.includePathRelation.map(includeChildRelation => {
@@ -460,6 +472,7 @@ abstract class AbstractQuery[R](
           })
         }
 
+        // get the parent PK field from this materialized entity, if present
         val parentPkFieldMetaData = parentIncludePath.map(parentInclude =>
           getParentPKFieldMetadata(includePath, parentInclude.subQueryable.sample, includePath.subQueryable.sample))
 
